@@ -158,18 +158,22 @@ export function Formulario({
       for (let indice = 0; indice < siguientes.length; indice++) {
         if (indice > 0) await esperar(1100)
         const foto = siguientes[indice]
+        if (!foto) continue
         const resultadoFoto = await leerFoto(foto.uri, foto.ancho)
         if (resultadoFoto.ok) lecturas.push(resultadoFoto.lectura)
         else motivos.push(resultadoFoto.motivo)
       }
       if (lecturas.length === 0) {
+        const mensaje = mensajeLecturaFallida(motivos)
         setLecturaFallida(true)
-        setAvisoLectura(mensajeLecturaFallida(motivos))
+        setAvisoLectura(mensaje)
+        Alert.alert("No leí la captura", mensaje)
         return
       }
       const aviso = aplicarLectura(combinarLecturas(lecturas))
       setLecturaFallida(false)
       setAvisoLectura(aviso)
+      Alert.alert("Datos de la captura", aviso)
     } catch {
       setLecturaFallida(true)
       setAvisoLectura("No pude leer la foto. Quedó adjunta; completa el monto y los folios a mano.")
@@ -359,7 +363,7 @@ export function Formulario({
 
         <Text style={estilos.seccion}>Captura de la pantalla</Text>
         <Text style={estilos.ayuda}>
-          La foto que sacas al pagar. Se envía a OCR.space para leer el monto y los folios. Hace falta internet.
+          Al adjuntar la captura se completan el monto y los folios. La foto se envía a OCR.space; hace falta internet.
         </Text>
         <View style={estilos.acciones}>
           <Boton

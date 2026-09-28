@@ -1,5 +1,5 @@
 import { File } from "expo-file-system"
-import { ImageManipulator, SaveFormat } from "expo-image-manipulator"
+import { manipulateAsync, SaveFormat } from "expo-image-manipulator"
 import { leerTexto, type Lectura } from "./leerDocumento"
 
 const OCR_URL = "https://api.ocr.space/parse/image"
@@ -12,52 +12,43 @@ export type ResultadoFoto =
 type RespuestaOcr = {
   IsErroredOnProcessing?: boolean
   ErrorMessage?: string | string[] | null
-  ParsedResults?: { ParsedText?: string }[]
+  ParsedResults?: { ParsedText?: string; ErrorMessage?: string }[]
 }
 
 function mensajeError(error: RespuestaOcr["ErrorMessage"]): string {
-  if (Array.isArray(error)) return error.join(" ")
+  if (Array.isArray(error)) return error.filter(Boolean).join(" ")
   return error ?? ""
 }
 
-async function jpegBase64(uri: string, ancho: number | undefined, tope: number, calidad: number): Promise<string | null> {
-  const contexto = ImageManipulator.manipulate(uri)
-  if (!ancho || ancho > tope) contexto.resize({ width: tope })
-  const imagen = await contexto.renderAsync()
-  const resultado = await imagen.saveAsync({
-    compress: calidad,
-    format: SaveFormat.JPEG,
-    base64: true,
-  })
-  return resultado.base64 ?? null
+async function jpegParaLeer(uri: string, ancho: number | undefined): Promise<string | null> {
+  const intentos = [
+    { tope: 1400, calidad: 0.6 },
+    { tope: 1000, calidad: 0.4 },
+  ]
+  let origen = uri
+  let anchoOrigen = ancho
+  for (const intento of intentos) {
+    const acciones = !anchoOrigen || anchoOrigen > intento.tope ? [{ resize: { width: intento.tope } }] : []
+    const imagen = await manipulateAsync(origen, acciones, {
+      compress: intento.calidad,
+      format: SaveFormat.JPEG,
+    })
+    origen = imagen.uri
+    anchoOrigen = imagen.width
+    const archivo = new File(imagen.uri)
+    if (archivo.exists && archivo.size > 0 && archivo.size <= 900_000) return imagen.uri
+  }
+  return null
 }
 
-async function base64DeFoto(uri: string, ancho: number | undefined): Promise<string | null> {
-  try {
-    let base64 = await jpegBase64(uri, ancho, 1400, 0.6)
-    if (base64 && base64.length > 1_000_000) base64 = await jpegBase64(uri, ancho, 1000, 0.4)
-    if (base64) return base64
-  } catch {
-    /* la foto original puede servir si ya es liviana */
-  }
-  try {
-    const archivo = new File(uri)
-    if (!archivo.exists || archivo.size > 900_000) return null
-    return archivo.base64Sync()
-  } catch {
-    return null
-  }
-}
-
-async function pedirTexto(base64: string, motor: "1" | "2"): Promise<{ texto: string; error: string }> {
+async function pedirTexto(uri: string, motor: "1" | "2"): Promise<{ texto: string; error: string }> {
   const cuerpo = new FormData()
-  cuerpo.append("base64Image", `data:image/jpeg;base64,${base64}`)
+  cuerpo.append("file", { uri, name: "captura.jpg", type: "image/jpeg" } as unknown as Blob)
   cuerpo.append("language", "spa")
   cuerpo.append("isOverlayRequired", "false")
   cuerpo.append("OCREngine", motor)
   cuerpo.append("scale", "true")
   cuerpo.append("detectOrientation", "true")
-  cuerpo.append("filetype", "JPG")
 
   const control = new AbortController()
   const plazo = setTimeout(() => control.abort(), 30_000)
@@ -74,29 +65,23 @@ async function pedirTexto(base64: string, motor: "1" | "2"): Promise<{ texto: st
       .map((resultado) => resultado.ParsedText ?? "")
       .join("\n")
       .trim()
-    return { texto, error: mensajeError(datos.ErrorMessage) }
+    const errorLinea = (datos.ParsedResults ?? [])
+      .map((resultado) => resultado.ErrorMessage ?? "")
+      .join(" ")
+    return { texto, error: `${mensajeError(datos.ErrorMessage)} ${errorLinea}`.trim() }
   } finally {
     clearTimeout(plazo)
   }
 }
 
-async function textoDeFoto(base64: string): Promise<string> {
-  const primero = await pedirTexto(base64, "2")
-  if (primero.texto) return primero.texto
-  if (/engine/i.test(primero.error)) {
-    const segundo = await pedirTexto(base64, "1")
-    return segundo.texto
-  }
-  return ""
-}
-
 export async function leerFoto(uri: string, ancho?: number): Promise<ResultadoFoto> {
   try {
-    const base64 = await base64DeFoto(uri, ancho)
-    if (!base64) return { ok: false, motivo: "servicio" }
-    const texto = await textoDeFoto(base64)
-    if (!texto) return { ok: false, motivo: "servicio" }
-    const lectura = leerTexto(texto)
+    const jpeg = await jpegParaLeer(uri, ancho)
+    if (!jpeg) return { ok: false, motivo: "servicio" }
+    let leido = await pedirTexto(jpeg, "2")
+    if (!leido.texto) leido = await pedirTexto(jpeg, "1")
+    if (!leido.texto) return { ok: false, motivo: "servicio" }
+    const lectura = leerTexto(leido.texto)
     if (lectura.monto == null && lectura.documentos.length === 0) return { ok: false, motivo: "sin_datos" }
     return { ok: true, lectura }
   } catch (error) {
