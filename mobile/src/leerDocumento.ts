@@ -61,10 +61,65 @@ const FECHA_NUMERO_RE = /\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})\b/g
 
 type Intervalo = { index: number; fin: number }
 
+type RolMonto = "total" | "cargo" | "vuelto" | null
+
 type Token =
   | { tipo: "folio"; valor: string; tipoDocumento: TipoDocumento; index: number; fin: number }
-  | { tipo: "monto"; valor: number; total: boolean; index: number; fin: number }
+  | { tipo: "monto"; valor: number; rol: RolMonto; ignorar: boolean; index: number; fin: number }
   | { tipo: "fecha"; valor: string; index: number; fin: number }
+
+const VALOR_PALABRA: Record<string, number> = {
+  cero: 0,
+  un: 1,
+  uno: 1,
+  una: 1,
+  dos: 2,
+  tres: 3,
+  cuatro: 4,
+  cinco: 5,
+  seis: 6,
+  siete: 7,
+  ocho: 8,
+  nueve: 9,
+  diez: 10,
+  once: 11,
+  doce: 12,
+  trece: 13,
+  catorce: 14,
+  quince: 15,
+  dieciseis: 16,
+  diecisiete: 17,
+  dieciocho: 18,
+  diecinueve: 19,
+  veinte: 20,
+  veintiun: 21,
+  veintiuno: 21,
+  veintidos: 22,
+  veintitres: 23,
+  veinticuatro: 24,
+  veinticinco: 25,
+  veintiseis: 26,
+  veintisiete: 27,
+  veintiocho: 28,
+  veintinueve: 29,
+  treinta: 30,
+  cuarenta: 40,
+  cincuenta: 50,
+  sesenta: 60,
+  setenta: 70,
+  ochenta: 80,
+  noventa: 90,
+  cien: 100,
+  ciento: 100,
+  doscientos: 200,
+  trescientos: 300,
+  cuatrocientos: 400,
+  quinientos: 500,
+  seiscientos: 600,
+  setecientos: 700,
+  ochocientos: 800,
+  novecientos: 900,
+}
 
 function isoValida(year: number, month: number, day: number): string | null {
   if (year < 2000 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) return null
@@ -98,9 +153,83 @@ function cruza(index: number, fin: number, intervalos: Intervalo[]): boolean {
   return intervalos.some((intervalo) => index < intervalo.fin && fin > intervalo.index)
 }
 
-function etiquetaTotal(fragmento: string): boolean {
-  const texto = fragmento.toLowerCase().replace(/subtotal/g, " ")
-  return /\btotal\b/.test(texto) || /\ba pagar\b/.test(texto) || /\bmonto pagado\b/.test(texto)
+function sinAcento(texto: string) {
+  return texto
+    .toLowerCase()
+    .replace(/á/g, "a")
+    .replace(/é/g, "e")
+    .replace(/í/g, "i")
+    .replace(/ó/g, "o")
+    .replace(/ú/g, "u")
+    .replace(/ü/g, "u")
+}
+
+function rolCercano(fragmento: string): RolMonto {
+  const texto = ` ${sinAcento(fragmento)} `
+  const marcas: [Exclude<RolMonto, null>, string][] = [
+    ["vuelto", "vuelto"],
+    ["vuelto", "cambio"],
+    ["vuelto", "propina"],
+    ["total", "total"],
+    ["total", "a pagar"],
+    ["cargo", "credito"],
+    ["cargo", "debito"],
+    ["cargo", "efectivo"],
+    ["cargo", "abono"],
+  ]
+  let ultimo: { rol: Exclude<RolMonto, null>; index: number } | null = null
+  for (const [rol, palabra] of marcas) {
+    let desde = 0
+    while (desde < texto.length) {
+      const index = texto.indexOf(palabra, desde)
+      if (index < 0) break
+      if (palabra === "total" && texto.slice(index - 3, index) === "sub") {
+        desde = index + palabra.length
+        continue
+      }
+      if (!ultimo || index >= ultimo.index) ultimo = { rol, index }
+      desde = index + palabra.length
+    }
+  }
+  return ultimo?.rol ?? null
+}
+
+function interpretarPalabras(palabras: string[]): number | null {
+  let total = 0
+  let grupo = 0
+  let alguna = false
+  for (const palabra of palabras) {
+    if (palabra === "y" || palabra === "de") continue
+    if (palabra === "mil") {
+      grupo = (grupo || 1) * 1000
+      total += grupo
+      grupo = 0
+      alguna = true
+      continue
+    }
+    if (palabra === "millon" || palabra === "millones") {
+      grupo = (grupo || 1) * 1_000_000
+      total += grupo
+      grupo = 0
+      alguna = true
+      continue
+    }
+    const valor = VALOR_PALABRA[palabra]
+    if (valor == null) return null
+    alguna = true
+    if (valor < 10 && grupo % 100 >= 20 && grupo % 10 === 0) grupo += valor
+    else grupo += valor
+  }
+  if (!alguna) return null
+  const monto = total + grupo
+  return monto > 0 ? monto : null
+}
+
+function montoEnPalabras(texto: string): number | null {
+  const plano = sinAcento(texto).replace(/[^a-z\n]+/g, " ").replace(/\s+/g, " ")
+  const frase = plano.match(/son\s+((?:[a-z]+\s+){1,14})pesos/)
+  if (!frase?.[1]) return null
+  return interpretarPalabras(frase[1].trim().split(" "))
 }
 
 function tipoCerca(texto: string, index: number, fin: number): TipoDocumento {
@@ -236,10 +365,17 @@ export function leerTexto(entrada: string): Lectura {
     const index = match.index
     const fin = index + match[0].length
     if (cruza(index, fin, ocupados)) continue
-    const desde = Math.max(0, index - 80)
-    const total = etiquetaTotal(texto.slice(desde, index))
+    const desde = Math.max(0, index - 120)
+    const rol = rolCercano(texto.slice(desde, index))
     ocupados.push({ index, fin })
-    tokens.push({ tipo: "monto", valor, total, index, fin })
+    tokens.push({ tipo: "monto", valor, rol, ignorar: false, index, fin })
+  }
+
+  const montos = tokens.filter((token) => token.tipo === "monto")
+  if (montos.some((monto) => monto.rol !== "vuelto")) {
+    for (const monto of montos) {
+      if (monto.rol === "vuelto") monto.ignorar = true
+    }
   }
 
   tokens.sort((a, b) => a.index - b.index || a.fin - b.fin)
@@ -271,20 +407,27 @@ export function leerTexto(entrada: string): Lectura {
       else if (!actual) fechasSueltas.push(token.valor)
       continue
     }
-    if (token.total) {
+    if (token.tipo === "monto" && token.ignorar) continue
+    if (token.tipo === "monto" && token.rol === "total") {
       totales.push(token.valor)
       continue
     }
-    if (actual && actual.monto === 0) actual.monto = token.valor
+    if (token.tipo === "monto" && actual && actual.monto === 0) actual.monto = token.valor
   }
   cerrarActual()
 
   const total = totales.length > 0 ? totales[totales.length - 1] : null
   const documentos = elegirDocumentos(pares, total, cantidadUtil)
   const fechaPago = fechaDePago(texto, tokens) ?? fechasSueltas[0] ?? null
+  const palabras = montoEnPalabras(texto)
+  const utiles = montos.filter((monto) => !monto.ignorar)
+  const igualPalabras = palabras != null ? utiles.find((monto) => monto.valor === palabras)?.valor ?? null : null
+  const cargo = [...utiles].reverse().find((monto) => monto.rol === "cargo")?.valor ?? null
+  const unico = utiles.length === 1 ? utiles[0].valor : null
+  const suma = documentos.reduce((acumulado, documento) => acumulado + documento.monto, 0)
 
   return {
-    monto: total ?? (documentos.length > 0 ? documentos.reduce((suma, documento) => suma + documento.monto, 0) : null),
+    monto: total ?? cargo ?? igualPalabras ?? (documentos.length > 0 ? suma : null) ?? unico ?? palabras,
     documentos,
     proveedor: proveedorDe(texto),
     fecha: fechaPago,

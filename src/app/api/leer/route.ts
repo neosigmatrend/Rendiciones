@@ -59,8 +59,8 @@ export async function POST(request: Request) {
       return Response.json({ ok: false, motivo: "servicio" }, { status: 400 })
     }
     const jpeg = await jpegDe(Buffer.from(await foto.arrayBuffer()))
-    let texto = await pedirTexto(jpeg, "2")
-    if (!texto) texto = await pedirTexto(jpeg, "1")
+    let texto = await pedirTexto(jpeg, "1")
+    if (!texto) texto = await pedirTexto(jpeg, "2")
     if (!texto) return Response.json({ ok: false, motivo: "servicio" })
     const lectura = leerTexto(texto)
     if (lectura.monto == null && lectura.documentos.length === 0) {

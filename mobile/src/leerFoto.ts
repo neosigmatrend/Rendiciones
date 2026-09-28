@@ -1,4 +1,3 @@
-import { File } from "expo-file-system"
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator"
 import { leerTexto, type Lectura } from "./leerDocumento"
 
@@ -20,35 +19,27 @@ function mensajeError(error: RespuestaOcr["ErrorMessage"]): string {
   return error ?? ""
 }
 
-async function jpegParaLeer(uri: string, ancho: number | undefined): Promise<string | null> {
-  const intentos = [
-    { tope: 1400, calidad: 0.6 },
-    { tope: 1000, calidad: 0.4 },
-  ]
-  let origen = uri
-  let anchoOrigen = ancho
-  for (const intento of intentos) {
-    const acciones = !anchoOrigen || anchoOrigen > intento.tope ? [{ resize: { width: intento.tope } }] : []
-    const imagen = await manipulateAsync(origen, acciones, {
-      compress: intento.calidad,
-      format: SaveFormat.JPEG,
-    })
-    origen = imagen.uri
-    anchoOrigen = imagen.width
-    const archivo = new File(imagen.uri)
-    if (archivo.exists && archivo.size > 0 && archivo.size <= 900_000) return imagen.uri
-  }
-  return null
+async function jpegBase64(uri: string, ancho: number | undefined): Promise<string | null> {
+  const grande = !ancho || ancho > 1400 ? [{ resize: { width: 1400 } }] : []
+  const imagen = await manipulateAsync(uri, grande, { compress: 0.55, format: SaveFormat.JPEG, base64: true })
+  if (imagen.base64 && imagen.base64.length <= 1_000_000) return imagen.base64
+  const menor = await manipulateAsync(uri, [{ resize: { width: 1000 } }], {
+    compress: 0.4,
+    format: SaveFormat.JPEG,
+    base64: true,
+  })
+  return menor.base64 ?? imagen.base64 ?? null
 }
 
-async function pedirTexto(uri: string, motor: "1" | "2"): Promise<{ texto: string; error: string }> {
+async function pedirTexto(base64: string, motor: "1" | "2"): Promise<{ texto: string; error: string }> {
   const cuerpo = new FormData()
-  cuerpo.append("file", { uri, name: "captura.jpg", type: "image/jpeg" } as unknown as Blob)
+  cuerpo.append("base64Image", `data:image/jpeg;base64,${base64}`)
   cuerpo.append("language", "spa")
   cuerpo.append("isOverlayRequired", "false")
   cuerpo.append("OCREngine", motor)
   cuerpo.append("scale", "true")
   cuerpo.append("detectOrientation", "true")
+  cuerpo.append("filetype", "JPG")
 
   const control = new AbortController()
   const plazo = setTimeout(() => control.abort(), 30_000)
@@ -76,10 +67,10 @@ async function pedirTexto(uri: string, motor: "1" | "2"): Promise<{ texto: strin
 
 export async function leerFoto(uri: string, ancho?: number): Promise<ResultadoFoto> {
   try {
-    const jpeg = await jpegParaLeer(uri, ancho)
+    const jpeg = await jpegBase64(uri, ancho)
     if (!jpeg) return { ok: false, motivo: "servicio" }
-    let leido = await pedirTexto(jpeg, "2")
-    if (!leido.texto) leido = await pedirTexto(jpeg, "1")
+    let leido = await pedirTexto(jpeg, "1")
+    if (!leido.texto) leido = await pedirTexto(jpeg, "2")
     if (!leido.texto) return { ok: false, motivo: "servicio" }
     const lectura = leerTexto(leido.texto)
     if (lectura.monto == null && lectura.documentos.length === 0) return { ok: false, motivo: "sin_datos" }

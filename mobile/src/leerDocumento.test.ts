@@ -162,4 +162,28 @@ assert.equal(leerTexto(ocrAguas).monto, 211060)
 assert.deepEqual(leerTexto(ocrAguas).documentos, [])
 assert.equal(leerTexto(ocrAguas).fecha, "2026-08-17")
 
+const boletaPapel = `
+CREDITO S
+VUELTO S
+35.790
+SON :
+TREINTA Y CINCO MIL SETECIENTOS
+NOVENTA PESOS
+OFERTAS NO ACUMULABLES
+`
+assert.equal(leerTexto(boletaPapel).monto, 35790)
+assert.deepEqual(leerTexto(boletaPapel).documentos, [])
+
+const soloUnMonto = `
+Comprobante
+128.500
+`
+assert.equal(leerTexto(soloUnMonto).monto, 128500)
+assert.deepEqual(leerTexto(soloUnMonto).documentos, [])
+
+const enPalabras = `
+SON: DIEZ MIL PESOS
+`
+assert.equal(leerTexto(enPalabras).monto, 10000)
+
 console.log("lectura ok")

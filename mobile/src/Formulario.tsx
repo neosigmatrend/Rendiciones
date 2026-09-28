@@ -63,7 +63,8 @@ function mensajeLecturaFallida(motivos: Array<"sin_datos" | "sin_red" | "servici
   if (motivos.length > 0 && motivos.every((motivo) => motivo === "sin_datos")) {
     return "No encontré el monto ni los folios en la captura."
   }
-  return "No pude leer la captura. Revisa que el teléfono tenga internet."
+  if (motivos.includes("sin_red")) return "No pude leer la captura. Revisa que el teléfono tenga internet."
+  return "No pude leer el monto en esta captura."
 }
 
 function mensajeLectura(lectura: Lectura): string {
@@ -193,7 +194,7 @@ export function Formulario({
     } catch {
       setLecturaFallida(true)
       setCorrigiendo(true)
-      setAvisoLectura("No pude leer la captura. Revisa que el teléfono tenga internet.")
+      setAvisoLectura("No pude leer el monto en esta captura.")
     } finally {
       setPaso("confirmar")
     }
