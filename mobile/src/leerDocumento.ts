@@ -61,7 +61,7 @@ const FECHA_NUMERO_RE = /\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})\b/g
 
 type Intervalo = { index: number; fin: number }
 
-type RolMonto = "total" | "cargo" | "vuelto" | "impuesto" | "subtotal" | null
+type RolMonto = "total" | "cargo" | "vuelto" | "iva" | "neto" | "subtotal" | null
 
 type Token =
   | { tipo: "folio"; valor: string; tipoDocumento: TipoDocumento; index: number; fin: number }
@@ -167,17 +167,19 @@ function sinAcento(texto: string) {
 function rolCercano(fragmento: string): RolMonto {
   const texto = sinAcento(fragmento)
   const marcas: [Exclude<RolMonto, null>, RegExp][] = [
-    ["impuesto", /total\s*iva/g],
-    ["impuesto", /(?<![a-z])iva(?![a-z])/g],
-    ["impuesto", /(?<![a-z])neto(?![a-z])/g],
+    ["iva", /total\s*iva/g],
+    ["iva", /(?<![a-z])iva(?![a-z])/g],
+    ["neto", /(?<![a-z])neto(?![a-z])/g],
     ["subtotal", /sub\s*total/g],
     ["vuelto", /(?<![a-z])(?:vuelto|cambio|propina)(?![a-z])/g],
     ["total", /(?<![a-z])total(?![a-z])/g],
     ["total", /a\s+pagar/g],
-    ["cargo", /(?<![a-z])(?:credito|debito|efectivo|abono)(?![a-z])/g],
+    ["cargo", /(?<![a-z])monto(?!s)(?!\s*(?:neto|iva|exento|afecto|bruto|descuento))/g],
+    ["cargo", /(?<![a-z])(?:credito|debito|efectivo|abono|redcompra)(?![a-z])/g],
   ]
   const prioridad: Record<Exclude<RolMonto, null>, number> = {
-    impuesto: 5,
+    iva: 6,
+    neto: 5,
     subtotal: 4,
     vuelto: 3,
     cargo: 2,
@@ -299,9 +301,13 @@ function elegirDocumentos(
   return documentos
 }
 
+function cargoDe(montos: Extract<Token, { tipo: "monto" }>[]): number | null {
+  return [...montos].reverse().find((monto) => !monto.ignorar && monto.rol === "cargo")?.valor ?? null
+}
+
 function lineaAnteriorProhibida(texto: string, index: number): boolean {
-  const previo = texto.slice(Math.max(0, index - 40), index).toLowerCase()
-  return /(cliente|rut|tel[eé]fono|c[oó]digo|autorizaci[oó]n)\s*$/i.test(previo.trim())
+  const previo = texto.slice(Math.max(0, index - 48), index).toLowerCase()
+  return /(cliente|rut|tel[eé]fono|c[oó]digo|autorizaci[oó]n|operaci[oó]n|voucher|terminal|comercio|cuota)[^\n]{0,16}$/i.test(previo.trim())
 }
 
 export function leerTexto(entrada: string): Lectura {
@@ -375,9 +381,9 @@ export function leerTexto(entrada: string): Lectura {
 
   const montos = tokens.filter((token) => token.tipo === "monto")
   for (const monto of montos) {
-    if (monto.rol === "impuesto") monto.ignorar = true
+    if (monto.rol === "iva" || monto.rol === "neto") monto.ignorar = true
   }
-  if (montos.some((monto) => monto.rol !== "vuelto" && monto.rol !== "impuesto")) {
+  if (montos.some((monto) => monto.rol !== "vuelto" && monto.rol !== "iva" && monto.rol !== "neto")) {
     for (const monto of montos) {
       if (monto.rol === "vuelto") monto.ignorar = true
     }
@@ -392,6 +398,8 @@ export function leerTexto(entrada: string): Lectura {
   const pares: DocumentoLeido[] = []
   const totales: number[] = []
   const subtotales: number[] = []
+  const netos: number[] = []
+  const ivas: number[] = []
   const fechasSueltas: string[] = []
   let actual: DocumentoLeido | null = null
 
@@ -413,6 +421,14 @@ export function leerTexto(entrada: string): Lectura {
       else if (!actual) fechasSueltas.push(token.valor)
       continue
     }
+    if (token.tipo === "monto" && token.rol === "neto") {
+      netos.push(token.valor)
+      continue
+    }
+    if (token.tipo === "monto" && token.rol === "iva") {
+      ivas.push(token.valor)
+      continue
+    }
     if (token.tipo === "monto" && token.ignorar) continue
     if (token.tipo === "monto" && token.rol === "total") {
       totales.push(token.valor)
@@ -428,17 +444,21 @@ export function leerTexto(entrada: string): Lectura {
 
   const total = totales.length > 0 ? totales[totales.length - 1] : null
   const subtotal = subtotales.length > 0 ? subtotales[subtotales.length - 1] : null
-  const documentos = elegirDocumentos(pares, total ?? subtotal, cantidadUtil)
+  const neto = netos.length > 0 ? netos[netos.length - 1] : null
+  const iva = ivas.length > 0 ? ivas[ivas.length - 1] : null
+  const sumaFiscal = neto != null && iva != null ? neto + iva : null
+  const comprobado = [cargoDe(montos), total, subtotal].find((valor) => valor != null && valor === sumaFiscal) ?? null
+  const documentos = elegirDocumentos(pares, comprobado ?? total ?? subtotal, cantidadUtil)
   const fechaPago = fechaDePago(texto, tokens) ?? fechasSueltas[0] ?? null
   const palabras = montoEnPalabras(texto)
   const utiles = montos.filter((monto) => !monto.ignorar)
   const igualPalabras = palabras != null ? utiles.find((monto) => monto.valor === palabras)?.valor ?? null : null
-  const cargo = [...utiles].reverse().find((monto) => monto.rol === "cargo")?.valor ?? null
+  const cargo = cargoDe(montos)
   const unico = utiles.length === 1 ? utiles[0].valor : null
   const suma = documentos.reduce((acumulado, documento) => acumulado + documento.monto, 0)
 
   return {
-    monto: cargo ?? total ?? subtotal ?? igualPalabras ?? (documentos.length > 0 ? suma : null) ?? unico ?? palabras,
+    monto: comprobado ?? cargo ?? total ?? subtotal ?? igualPalabras ?? (documentos.length > 0 ? suma : null) ?? unico ?? palabras,
     documentos,
     proveedor: proveedorDe(texto),
     fecha: fechaPago,

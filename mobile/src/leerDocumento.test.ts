@@ -204,4 +204,16 @@ VUELTO $ 0
 assert.equal(leerTexto(supermercado).monto, 22890)
 assert.deepEqual(leerTexto(supermercado).documentos, [])
 
+const voucher = `
+TRANSBANK
+COMPRA
+MONTO $ 45.990
+NUMERO DE OPERACION
+482193
+CODIGO AUTORIZACION
+551203
+`
+assert.equal(leerTexto(voucher).monto, 45990)
+assert.deepEqual(leerTexto(voucher).documentos, [])
+
 console.log("lectura ok")
