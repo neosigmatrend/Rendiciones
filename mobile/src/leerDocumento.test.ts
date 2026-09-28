@@ -1,0 +1,162 @@
+import assert from "node:assert/strict"
+import { leerTexto } from "./leerDocumento.ts"
+
+function folios(texto: string): string[] {
+  return leerTexto(texto).documentos.map((documento) => documento.folio)
+}
+
+function montos(texto: string): number[] {
+  return leerTexto(texto).documentos.map((documento) => documento.monto)
+}
+
+const agrosuper = `
+Agrosuper
+Pagar en línea
+21 Sep 2026
+
+#101070510
+22 Ago 2026
+53,480 CLP
+
+#101069001
+10 Ago 2026
+55,287 CLP
+
+#101070582
+26 Ago 2026
+113,067 CLP
+
+Total a pagar
+$166,547
+2 documentos seleccionados
+`
+
+const gasco = `
+Gasco
+Cliente Granel
+Cliente N° 12442757
+
+Documento N° 12214585
+Recarga
+$405.057
+
+Documento N° 12210001
+Recarga
+
+Documento Nº 12215855
+Recarga
+$175.122
+
+Total
+$580.179
+`
+
+const aguas = `
+WEBPAY
+Aguas Andinas
+Fecha de pago 8/17/2026 10:58:57 PM
+Total $211.060
+PAGADO
+`
+
+assert.equal(leerTexto(agrosuper).proveedor, "Agrosuper")
+assert.equal(leerTexto(agrosuper).fecha, "2026-09-21")
+assert.equal(leerTexto(agrosuper).monto, 166547)
+assert.deepEqual(folios(agrosuper), ["101070510", "101070582"])
+assert.deepEqual(montos(agrosuper), [53480, 113067])
+assert.equal(leerTexto(agrosuper).documentos[0]?.fecha, "2026-08-22")
+assert.equal(leerTexto(agrosuper).documentos[1]?.fecha, "2026-08-26")
+
+assert.equal(leerTexto(gasco).proveedor, "Gasco")
+assert.equal(leerTexto(gasco).monto, 580179)
+assert.deepEqual(folios(gasco), ["12214585", "12215855"])
+assert.deepEqual(montos(gasco), [405057, 175122])
+assert.equal(folios(gasco).includes("12442757"), false)
+assert.equal(folios(gasco).includes("12210001"), false)
+
+assert.equal(leerTexto(aguas).proveedor, "Aguas Andinas")
+assert.equal(leerTexto(aguas).monto, 211060)
+assert.deepEqual(leerTexto(aguas).documentos, [])
+assert.equal(leerTexto(aguas).fecha, "2026-08-17")
+
+const boleta = `
+Boleta N° 445566
+$12.000
+Total $12.000
+`
+assert.equal(leerTexto(boleta).documentos[0]?.tipo, "boleta")
+assert.equal(leerTexto(boleta).documentos[0]?.folio, "445566")
+assert.equal(leerTexto(boleta).monto, 12000)
+
+const sinMoneda = `
+#101070510
+53.480
+#101070582
+113.067
+Total
+166.547
+`
+assert.equal(leerTexto(sinMoneda).monto, 166547)
+assert.deepEqual(folios(sinMoneda), ["101070510", "101070582"])
+
+const clienteEnOtraLinea = `
+Cliente
+N° 12442757
+Documento
+N° 12214585
+$10.000
+Total $10.000
+`
+assert.deepEqual(folios(clienteEnOtraLinea), ["12214585"])
+
+const ocrAgrosuper = `
+Agrosuper
+Pagar en linea
+21 Sep 2026
+# 101070510
+22 Ago 2026
+53,480 CLP
+# 101069001
+10 Ago 2026
+55,287 CLP
+#101070582
+26 Ago 2026
+113,067 CLP
+Total a pagar
+$166,547
+2 documentos seleccionados
+`
+assert.equal(leerTexto(ocrAgrosuper).monto, 166547)
+assert.deepEqual(folios(ocrAgrosuper), ["101070510", "101070582"])
+assert.equal(leerTexto(ocrAgrosuper).fecha, "2026-09-21")
+
+const ocrGasco = `
+Gasco
+Cliente Granel
+Cliente N 12442757
+Documento N 12214585
+Recarga
+$405.057
+Documento N 12210001
+Recarga
+Documento N 12215855
+Recarga
+$175.122
+Total
+$580.179
+`
+assert.equal(leerTexto(ocrGasco).monto, 580179)
+assert.deepEqual(folios(ocrGasco), ["12214585", "12215855"])
+
+const ocrAguas = `
+WEBPAY
+Aguas Andinas
+Fecha de pago 8/17/2026 10:58:57 PM
+Total $211.060
+PAGADO
+`
+assert.equal(leerTexto(ocrAguas).monto, 211060)
+assert.deepEqual(leerTexto(ocrAguas).documentos, [])
+assert.equal(leerTexto(ocrAguas).fecha, "2026-08-17")
+
+console.log("lectura ok")

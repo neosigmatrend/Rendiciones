@@ -1,6 +1,6 @@
 import DateTimePicker from "@react-native-community/datetimepicker"
 import * as ImagePicker from "expo-image-picker"
-import { useState, type ReactNode } from "react"
+import { useRef, useState, type ReactNode } from "react"
 import {
   Alert,
   Image,
@@ -23,6 +23,8 @@ import {
   isoDeDate,
   parseCLP,
 } from "./format"
+import { combinarLecturas, type DocumentoLeido, type Lectura } from "./leerDocumento"
+import { leerFoto } from "./leerFoto"
 import type { Foto, Pago, TipoDocumento } from "./types"
 import { TIPOS_DOCUMENTO } from "./types"
 import { Boton, PanelCuadre, colores } from "./ui"
@@ -36,6 +38,27 @@ type Borrador = {
 }
 
 type CapturaNueva = { key: string; uri: string; nombre: string }
+
+function esperar(ms: number) {
+  return new Promise((resolver) => setTimeout(resolver, ms))
+}
+
+function borradorLeido(documento: DocumentoLeido, indice: number): Borrador {
+  return {
+    key: `leido-${documento.folio}-${indice}`,
+    folio: documento.folio,
+    fecha: documento.fecha,
+    monto: formatMontoInput(documento.monto),
+    tipo: documento.tipo,
+  }
+}
+
+function mensajeLecturaFallida(motivos: Array<"sin_datos" | "sin_red" | "servicio">): string {
+  if (motivos.length > 0 && motivos.every((motivo) => motivo === "sin_datos")) {
+    return "No encontré el monto ni los folios en la foto. Quedó adjunta; complétalos a mano."
+  }
+  return "No pude leer la foto. Quedó adjunta; complétalos a mano. Revisa que el teléfono tenga internet."
+}
 
 function borradoresIniciales(pago?: Pago): Borrador[] {
   if (!pago || pago.documentos.length === 0) {
@@ -62,7 +85,8 @@ export function Formulario({
   onGuardado: (id: string) => void
 }) {
   const { guardar } = usePagos()
-  const [fecha, setFecha] = useState(pago?.fecha ?? hoyIso())
+  const fechaInicial = useRef(pago?.fecha ?? hoyIso())
+  const [fecha, setFecha] = useState(fechaInicial.current)
   const [mostrarFecha, setMostrarFecha] = useState(false)
   const [proveedor, setProveedor] = useState(pago?.proveedor ?? "")
   const [descripcion, setDescripcion] = useState(pago?.descripcion ?? "")
@@ -73,6 +97,17 @@ export function Formulario({
   const [fotosGuardadas, setFotosGuardadas] = useState<Foto[]>(pago?.fotos ?? [])
   const [fotosNuevas, setFotosNuevas] = useState<CapturaNueva[]>([])
   const [guardando, setGuardando] = useState(false)
+  const [leyendo, setLeyendo] = useState(false)
+  const [avisoLectura, setAvisoLectura] = useState<string | null>(null)
+  const [lecturaFallida, setLecturaFallida] = useState(false)
+  const proveedorRef = useRef(proveedor)
+  const montoRef = useRef(monto)
+  const fechaRef = useRef(fecha)
+  const documentosRef = useRef(documentos)
+  proveedorRef.current = proveedor
+  montoRef.current = monto
+  fechaRef.current = fecha
+  documentosRef.current = documentos
 
   function actualizarDocumento(key: string, cambios: Partial<Borrador>) {
     setDocumentos((actuales) => actuales.map((item) => (item.key === key ? { ...item, ...cambios } : item)))
@@ -102,12 +137,77 @@ export function Formulario({
             selectionLimit: 8,
           })
     if (resultado.canceled) return
-    const siguientes = resultado.assets.map((asset) => ({
+    const cupo = 8 - fotosGuardadas.length - fotosNuevas.length
+    if (cupo <= 0) {
+      Alert.alert("Demasiadas capturas", "Puedes adjuntar hasta 8 capturas por pago.")
+      return
+    }
+    const siguientes = resultado.assets.slice(0, cupo).map((asset) => ({
       key: asset.assetId ?? asset.uri,
       uri: asset.uri,
       nombre: asset.fileName ?? "captura.jpg",
+      ancho: asset.width,
     }))
     setFotosNuevas((actuales) => [...actuales, ...siguientes].slice(0, 8))
+    setLeyendo(true)
+    setLecturaFallida(false)
+    setAvisoLectura("Leyendo monto y folios…")
+    const lecturas: Lectura[] = []
+    const motivos: Array<"sin_datos" | "sin_red" | "servicio"> = []
+    try {
+      for (let indice = 0; indice < siguientes.length; indice++) {
+        if (indice > 0) await esperar(1100)
+        const foto = siguientes[indice]
+        const resultadoFoto = await leerFoto(foto.uri, foto.ancho)
+        if (resultadoFoto.ok) lecturas.push(resultadoFoto.lectura)
+        else motivos.push(resultadoFoto.motivo)
+      }
+      if (lecturas.length === 0) {
+        setLecturaFallida(true)
+        setAvisoLectura(mensajeLecturaFallida(motivos))
+        return
+      }
+      const aviso = aplicarLectura(combinarLecturas(lecturas))
+      setLecturaFallida(false)
+      setAvisoLectura(aviso)
+    } catch {
+      setLecturaFallida(true)
+      setAvisoLectura("No pude leer la foto. Quedó adjunta; completa el monto y los folios a mano.")
+    } finally {
+      setLeyendo(false)
+    }
+  }
+
+  function aplicarLectura(lectura: Lectura): string {
+    if (lectura.proveedor && !proveedorRef.current.trim()) setProveedor(lectura.proveedor)
+    if (lectura.fecha && fechaRef.current === fechaInicial.current) setFecha(lectura.fecha)
+    const montoVacio = !montoRef.current.trim()
+    if (lectura.monto != null && montoVacio) setMonto(formatMontoInput(lectura.monto))
+
+    const actuales = documentosRef.current
+    const vacios = actuales.every((documento) => !documento.folio.trim() && !documento.fecha && !(parseCLP(documento.monto) ?? 0))
+    const existentes = new Set(actuales.map((documento) => documento.folio.trim()).filter(Boolean))
+    const nuevos = lectura.documentos.filter((documento) => !existentes.has(documento.folio))
+    if (nuevos.length > 0) {
+      const filas = nuevos.map((documento, indice) => borradorLeido(documento, indice))
+      setDocumentos(vacios ? filas : [...actuales, ...filas])
+    }
+
+    if (montoVacio && lectura.monto != null && nuevos.length > 0) {
+      return nuevos.length === 1
+        ? "Leí el monto y 1 folio. Revísalos antes de guardar."
+        : `Leí el monto y ${nuevos.length} folios. Revísalos antes de guardar.`
+    }
+    if (montoVacio && lectura.monto != null && lectura.documentos.length > 0) {
+      return "Leí el monto. Los folios ya estaban en el pago."
+    }
+    if (montoVacio && lectura.monto != null) {
+      return "Leí el monto. En la captura no aparecen folios; puedes completarlos después."
+    }
+    if (nuevos.length > 0) {
+      return nuevos.length === 1 ? "Leí 1 folio. Revisa el monto del cargo." : `Leí ${nuevos.length} folios. Revisa el monto del cargo.`
+    }
+    return "La foto quedó adjunta. El monto y los folios ya estaban escritos."
   }
 
   async function onGuardar() {
@@ -181,7 +281,7 @@ export function Formulario({
       <ScrollView contentContainerStyle={estilos.contenido} keyboardShouldPersistTaps="handled">
         <Text style={estilos.titulo}>{pago ? `Editar ${pago.proveedor}` : "Registrar pago"}</Text>
         <Text style={estilos.ayuda}>
-          Anota el cargo de la tarjeta y adjunta la captura. Varias facturas pueden sumar ese monto, como en Agrosuper o Gasco.
+          Adjunta la captura del pago. La app lee el monto y los folios. Varias facturas pueden sumar ese cargo, como en Agrosuper o Gasco.
         </Text>
 
         <Campo etiqueta="Fecha del pago">
@@ -258,11 +358,26 @@ export function Formulario({
         </Campo>
 
         <Text style={estilos.seccion}>Captura de la pantalla</Text>
-        <Text style={estilos.ayuda}>La foto que sacas al pagar. Puede ser la captura de la galería.</Text>
+        <Text style={estilos.ayuda}>
+          La foto que sacas al pagar. Se envía a OCR.space para leer el monto y los folios. Hace falta internet.
+        </Text>
         <View style={estilos.acciones}>
-          <Boton titulo="Adjuntar captura" variante="secundario" onPress={() => elegirCapturas("galeria")} />
-          <Boton titulo="Tomar foto" variante="secundario" onPress={() => elegirCapturas("camara")} />
+          <Boton
+            titulo="Adjuntar captura"
+            variante="secundario"
+            disabled={leyendo || guardando}
+            onPress={() => elegirCapturas("galeria")}
+          />
+          <Boton
+            titulo="Tomar foto"
+            variante="secundario"
+            disabled={leyendo || guardando}
+            onPress={() => elegirCapturas("camara")}
+          />
         </View>
+        {avisoLectura ? (
+          <Text style={[estilos.aviso, lecturaFallida && estilos.avisoError]}>{avisoLectura}</Text>
+        ) : null}
         <View style={estilos.fotos}>
           {fotosGuardadas.map((foto) => (
             <VistaFoto
@@ -358,7 +473,11 @@ export function Formulario({
 
         <View style={estilos.acciones}>
           <Boton titulo="Cancelar" variante="secundario" onPress={onCancelar} />
-          <Boton titulo={guardando ? "Guardando…" : "Guardar pago"} onPress={onGuardar} disabled={guardando} />
+          <Boton
+            titulo={leyendo ? "Leyendo foto…" : guardando ? "Guardando…" : "Guardar pago"}
+            onPress={onGuardar}
+            disabled={guardando || leyendo}
+          />
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -391,6 +510,8 @@ const estilos = StyleSheet.create({
   titulo: { color: colores.tinta, fontSize: 28, fontWeight: "700" },
   seccion: { color: colores.tinta, fontSize: 20, fontWeight: "700", marginTop: 8 },
   ayuda: { color: colores.muted, fontSize: 15, lineHeight: 21 },
+  aviso: { color: colores.tinta, fontSize: 15, lineHeight: 21 },
+  avisoError: { color: colores.faltaTexto },
   campo: { gap: 6 },
   etiqueta: { color: colores.tinta, fontSize: 14, fontWeight: "700" },
   input: {
