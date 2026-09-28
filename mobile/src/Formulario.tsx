@@ -27,7 +27,7 @@ import {
   isoDeDate,
   parseCLP,
 } from "./format"
-import { combinarLecturas, type DocumentoLeido, type Lectura } from "./leerDocumento"
+import { combinarLecturas, type DocumentoLeido, type Lectura, type MontoCandidato } from "./leerDocumento"
 import { leerFoto } from "./leerFoto"
 import type { Foto, Pago, TipoDocumento } from "./types"
 import { TIPOS_DOCUMENTO } from "./types"
@@ -117,6 +117,8 @@ export function Formulario({
   const [corrigiendo, setCorrigiendo] = useState(false)
   const [avisoLectura, setAvisoLectura] = useState<string | null>(null)
   const [lecturaFallida, setLecturaFallida] = useState(false)
+  const [montosCandidatos, setMontosCandidatos] = useState<MontoCandidato[]>([])
+  const [foliosCandidatos, setFoliosCandidatos] = useState<DocumentoLeido[]>([])
   const camaraAbierta = useRef(false)
 
   function actualizarDocumento(key: string, cambios: Partial<Borrador>) {
@@ -129,6 +131,8 @@ export function Formulario({
     if (lectura.descripcion) setDescripcion(lectura.descripcion)
     if (lectura.monto != null) setMonto(formatMontoInput(lectura.monto))
     setDocumentos(lectura.documentos.map((documento, indice) => borradorLeido(documento, indice)))
+    setMontosCandidatos(lectura.montosCandidatos)
+    setFoliosCandidatos(lectura.foliosCandidatos)
     const estado = cuadreDe(lectura.monto ?? 0, lectura.documentos).estado
     setCorrigiendo(lectura.monto == null || estado === "falta" || estado === "sobra")
     setLecturaFallida(lectura.monto == null)
@@ -199,6 +203,14 @@ export function Formulario({
     } finally {
       setPaso("confirmar")
     }
+  }
+
+  function alternarFolio(candidato: DocumentoLeido) {
+    setDocumentos((actuales) => {
+      const dentro = actuales.some((item) => item.folio === candidato.folio)
+      if (dentro) return actuales.filter((item) => item.folio !== candidato.folio)
+      return [...actuales, borradorLeido(candidato, actuales.length)]
+    })
   }
 
   useEffect(() => {
@@ -282,7 +294,7 @@ export function Formulario({
     return (
       <ScrollView contentContainerStyle={estilos.contenido}>
         <Text style={estilos.titulo}>Capturar pago</Text>
-        <Text style={estilos.version}>versión 7</Text>
+        <Text style={estilos.version}>versión 8</Text>
         <Text style={estilos.ayuda}>
           Fotografía la boleta o la pantalla del pago. La app lee el monto y los folios, comprueba que sumen el cargo y te pide confirmar.
         </Text>
@@ -372,6 +384,54 @@ export function Formulario({
               style={estilos.input}
             />
           </DatoLeido>
+        ) : null}
+
+        {montosCandidatos.length > 1 ? (
+          <>
+            <Text style={estilos.seccion}>Montos en la captura</Text>
+            <Text style={estilos.ayuda}>Toca el que te cobraron en la tarjeta.</Text>
+            <View style={estilos.chips}>
+              {montosCandidatos.map((candidato) => {
+                const elegido = (parseCLP(monto) ?? 0) === candidato.valor
+                return (
+                  <Pressable
+                    key={`${candidato.valor}-${candidato.etiqueta}`}
+                    onPress={() => setMonto(formatMontoInput(candidato.valor))}
+                    style={[estilos.chip, elegido && estilos.chipActivo]}
+                  >
+                    <Text style={[estilos.chipTexto, elegido && estilos.chipTextoActivo]}>
+                      {formatCLP(candidato.valor)} · {candidato.etiqueta}
+                    </Text>
+                  </Pressable>
+                )
+              })}
+            </View>
+          </>
+        ) : null}
+
+        {foliosCandidatos.length > 0 ? (
+          <>
+            <Text style={estilos.seccion}>Folios en la captura</Text>
+            <Text style={estilos.ayuda}>Marca los que entran en este pago.</Text>
+            <View style={estilos.chips}>
+              {foliosCandidatos.map((candidato) => {
+                const elegido = documentos.some((item) => item.folio === candidato.folio)
+                return (
+                  <Pressable
+                    key={candidato.folio}
+                    onPress={() => alternarFolio(candidato)}
+                    style={[estilos.chip, elegido && estilos.chipActivo]}
+                  >
+                    <Text style={[estilos.chipTexto, elegido && estilos.chipTextoActivo]}>
+                      {elegido ? "✓ " : ""}
+                      {candidato.folio}
+                      {candidato.monto > 0 ? ` · ${formatCLP(candidato.monto)}` : ""}
+                    </Text>
+                  </Pressable>
+                )
+              })}
+            </View>
+          </>
         ) : null}
 
         <Text style={estilos.seccion}>Folios</Text>

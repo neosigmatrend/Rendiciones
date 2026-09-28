@@ -217,3 +217,17 @@ assert.equal(leerTexto(voucher).monto, 45990)
 assert.deepEqual(leerTexto(voucher).documentos, [])
 
 console.log("lectura ok")
+
+const candidatos = leerTexto(supermercado)
+assert.deepEqual(
+  candidatos.montosCandidatos.map((item) => `${item.valor} ${item.etiqueta}`),
+  ["22890 Subtotal", "22890 Total", "19236 Neto", "3654 IVA", "22890 Pagado con tarjeta"],
+)
+assert.deepEqual(
+  leerTexto(voucher).montosCandidatos.map((item) => `${item.valor} ${item.etiqueta}`),
+  ["45990 Pagado con tarjeta"],
+)
+assert.deepEqual(leerTexto(gasco).foliosCandidatos.map((item) => item.folio), ["12214585", "12210001", "12215855"])
+assert.deepEqual(leerTexto(gasco).documentos.map((item) => item.folio), ["12214585", "12215855"])
+
+console.log("candidatos ok")

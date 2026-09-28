@@ -7,9 +7,16 @@ export type DocumentoLeido = {
   tipo: TipoDocumento
 }
 
+export type MontoCandidato = {
+  valor: number
+  etiqueta: string
+}
+
 export type Lectura = {
   monto: number | null
   documentos: DocumentoLeido[]
+  montosCandidatos: MontoCandidato[]
+  foliosCandidatos: DocumentoLeido[]
   proveedor: string | null
   fecha: string | null
   descripcion: string | null
@@ -396,6 +403,7 @@ export function leerTexto(entrada: string): Lectura {
   const cantidadUtil = cantidad != null && cantidad >= 1 && cantidad <= 20 ? cantidad : null
 
   const pares: DocumentoLeido[] = []
+  const foliosCandidatos: DocumentoLeido[] = []
   const totales: number[] = []
   const subtotales: number[] = []
   const netos: number[] = []
@@ -404,8 +412,9 @@ export function leerTexto(entrada: string): Lectura {
   let actual: DocumentoLeido | null = null
 
   function cerrarActual() {
-    if (actual && actual.monto > 0 && !pares.some((documento) => documento.folio === actual?.folio)) {
-      pares.push(actual)
+    if (actual && !foliosCandidatos.some((documento) => documento.folio === actual?.folio)) {
+      foliosCandidatos.push(actual)
+      if (actual.monto > 0) pares.push(actual)
     }
     actual = null
   }
@@ -460,10 +469,33 @@ export function leerTexto(entrada: string): Lectura {
   return {
     monto: comprobado ?? cargo ?? total ?? subtotal ?? igualPalabras ?? (documentos.length > 0 ? suma : null) ?? unico ?? palabras,
     documentos,
+    montosCandidatos: candidatosDeMonto(montos),
+    foliosCandidatos,
     proveedor: proveedorDe(texto),
     fecha: fechaPago,
     descripcion: descripcionDe(texto),
   }
+}
+
+const ETIQUETA_ROL: Record<Exclude<RolMonto, null>, string> = {
+  total: "Total",
+  cargo: "Pagado con tarjeta",
+  vuelto: "Vuelto",
+  iva: "IVA",
+  neto: "Neto",
+  subtotal: "Subtotal",
+}
+
+function candidatosDeMonto(montos: Extract<Token, { tipo: "monto" }>[]): MontoCandidato[] {
+  const vistos = new Map<string, MontoCandidato>()
+  for (const monto of montos) {
+    const etiqueta = monto.rol ? ETIQUETA_ROL[monto.rol] : "Sin etiqueta"
+    const clave = `${monto.valor}-${etiqueta}`
+    if (!vistos.has(clave)) vistos.set(clave, { valor: monto.valor, etiqueta })
+  }
+  const todos = [...vistos.values()]
+  const etiquetados = todos.filter((candidato) => candidato.etiqueta !== "Sin etiqueta")
+  return etiquetados.length > 0 ? etiquetados : todos.slice(0, 12)
 }
 
 function descripcionDe(texto: string): string | null {
@@ -484,7 +516,11 @@ function fechaDePago(texto: string, tokens: Token[]): string | null {
 
 export function combinarLecturas(lecturas: Lectura[]): Lectura {
   const documentos: DocumentoLeido[] = []
+  const foliosCandidatos: DocumentoLeido[] = []
+  const montosCandidatos: MontoCandidato[] = []
   const folios = new Set<string>()
+  const candidatos = new Set<string>()
+  const montosVistos = new Set<string>()
   let monto: number | null = null
   let proveedor: string | null = null
   let fecha: string | null = null
@@ -499,6 +535,17 @@ export function combinarLecturas(lecturas: Lectura[]): Lectura {
       folios.add(documento.folio)
       documentos.push(documento)
     }
+    for (const documento of lectura.foliosCandidatos) {
+      if (candidatos.has(documento.folio)) continue
+      candidatos.add(documento.folio)
+      foliosCandidatos.push(documento)
+    }
+    for (const candidato of lectura.montosCandidatos) {
+      const clave = `${candidato.valor}-${candidato.etiqueta}`
+      if (montosVistos.has(clave)) continue
+      montosVistos.add(clave)
+      montosCandidatos.push(candidato)
+    }
   }
-  return { monto, documentos, proveedor, fecha, descripcion }
+  return { monto, documentos, montosCandidatos, foliosCandidatos, proveedor, fecha, descripcion }
 }
