@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PanelCuadre } from "@/components/cuadre-badge"
+import { CapturaPago } from "@/components/captura-pago"
 import { guardarPago, type FormState } from "@/lib/actions"
 import { formatMontoInput, parseCLP } from "@/lib/format"
 import type { Pago, TipoDocumento } from "@/lib/types"
@@ -41,6 +42,19 @@ export function PagoForm({
   fechaInicial,
 }: {
   pago?: Pago
+  tarjetas: string[]
+  fechaInicial: string
+}) {
+  if (!pago) return <CapturaPago tarjetas={tarjetas} fechaInicial={fechaInicial} />
+  return <EditorPago pago={pago} tarjetas={tarjetas} fechaInicial={fechaInicial} />
+}
+
+function EditorPago({
+  pago,
+  tarjetas,
+  fechaInicial,
+}: {
+  pago: Pago
   tarjetas: string[]
   fechaInicial: string
 }) {

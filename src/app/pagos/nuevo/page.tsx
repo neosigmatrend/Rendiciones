@@ -19,9 +19,9 @@ export default async function NuevoPago() {
       <Encabezado accion={false} />
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6">
         <div>
-          <h1 className="font-display text-3xl font-medium">Registrar pago</h1>
+          <h1 className="font-display text-3xl font-medium">Capturar pago</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Anota el cargo de la tarjeta en el momento en que pagas y guarda la captura de la pantalla.
+            Parte por la captura. La app lee el monto y los folios para que los confirmes.
           </p>
         </div>
         <PagoForm tarjetas={tarjetas} fechaInicial={fechaDeHoy()} />

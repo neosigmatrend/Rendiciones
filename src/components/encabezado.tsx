@@ -13,7 +13,7 @@ export function Encabezado({ accion = true }: { accion?: boolean }) {
         </Link>
         {accion ? (
           <Link href="/pagos/nuevo" className={buttonVariants({ size: "lg" })}>
-            Registrar pago
+            Capturar pago
           </Link>
         ) : null}
       </div>

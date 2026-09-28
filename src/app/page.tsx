@@ -79,11 +79,10 @@ export default async function Inicio({
           <section className="rounded-xl border border-dashed border-border px-4 py-10 text-center">
             <h1 className="font-display text-2xl font-medium">Todavía no hay pagos</h1>
             <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-              Cuando pagues con tarjeta, registra el cargo, adjunta la captura de la pantalla y agrega las facturas o
-              boletas que suman ese monto.
+              Toma o adjunta la pantalla del pago. La app lee el monto y los folios, y los dejas confirmados si cuadran.
             </p>
             <Link href="/pagos/nuevo" className={`${buttonVariants({ size: "lg" })} mt-5`}>
-              Registrar pago
+              Capturar pago
             </Link>
           </section>
         ) : (
