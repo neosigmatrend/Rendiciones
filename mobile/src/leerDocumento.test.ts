@@ -277,4 +277,38 @@ assert.deepEqual(
 )
 assert.equal(leerTexto(facturaElectronica).montosCandidatos.some((item) => item.valor === 76363579), false)
 
+const facturaEnColumnas = `
+FACTURA ELECTRONICA
+No. 181,176
+No. Código Detalle U.M. Precio Cantidad Descto. Total
+1 010100 TRM Fee Mensual
+183,932
+1
+183,932
+Neto:
+183,932
+Exento:
+0
+IVA 19%:
+34,947
+Total:
+218,879
+`
+assert.equal(leerTexto(facturaEnColumnas).monto, 218879)
+assert.deepEqual(
+  leerTexto(facturaEnColumnas).documentos.map((item) => `${item.folio} ${item.monto}`),
+  ["181176 218879"],
+)
+
+const soloLineaDeDetalle = `
+FACTURA ELECTRONICA
+No. 900123
+No. Código Detalle U.M. Precio Cantidad Descto. Total
+1 010100 Servicio mensual
+45,000
+1
+45,000
+`
+assert.equal(leerTexto(soloLineaDeDetalle).monto, 45000)
+
 console.log("candidatos ok")

@@ -6,8 +6,8 @@ const OCR_URL = "https://api.ocr.space/parse/image"
 const OCR_KEY = "helloworld"
 
 export type ResultadoFoto =
-  | { ok: true; lectura: Lectura }
-  | { ok: false; motivo: "sin_datos" | "sin_red" | "servicio" }
+  | { ok: true; lectura: Lectura; texto: string }
+  | { ok: false; motivo: "sin_datos" | "sin_red" | "servicio"; texto: string }
 
 type RespuestaOcr = {
   IsErroredOnProcessing?: boolean
@@ -71,20 +71,28 @@ async function pedirTexto(
   }
 }
 
+function interpretar(texto: string): ResultadoFoto {
+  const lectura = leerTexto(texto)
+  if (lectura.monto == null && lectura.documentos.length === 0) return { ok: false, motivo: "sin_datos", texto }
+  return { ok: true, lectura, texto }
+}
+
+function falla(error: unknown, texto: string): ResultadoFoto {
+  const nombre = error instanceof Error ? error.name : ""
+  if (nombre === "AbortError" || nombre === "TypeError") return { ok: false, motivo: "sin_red", texto }
+  return { ok: false, motivo: "servicio", texto }
+}
+
 export async function leerFoto(uri: string, ancho?: number): Promise<ResultadoFoto> {
   try {
     const jpeg = await jpegBase64(uri, ancho)
-    if (!jpeg) return { ok: false, motivo: "servicio" }
+    if (!jpeg) return { ok: false, motivo: "servicio", texto: "" }
     let leido = await pedirTexto(jpeg, "1", "image/jpeg", "JPG")
     if (!leido.texto) leido = await pedirTexto(jpeg, "2", "image/jpeg", "JPG")
-    if (!leido.texto) return { ok: false, motivo: "servicio" }
-    const lectura = leerTexto(leido.texto)
-    if (lectura.monto == null && lectura.documentos.length === 0) return { ok: false, motivo: "sin_datos" }
-    return { ok: true, lectura }
+    if (!leido.texto) return { ok: false, motivo: "servicio", texto: leido.error }
+    return interpretar(leido.texto)
   } catch (error) {
-    const nombre = error instanceof Error ? error.name : ""
-    if (nombre === "AbortError" || nombre === "TypeError") return { ok: false, motivo: "sin_red" }
-    return { ok: false, motivo: "servicio" }
+    return falla(error, "")
   }
 }
 
@@ -92,16 +100,15 @@ export async function leerPdf(uri: string): Promise<ResultadoFoto> {
   try {
     const archivo = new File(uri)
     const base64 = await archivo.base64()
-    if (!base64 || base64.length > 1_000_000) return { ok: false, motivo: "servicio" }
+    if (!base64) return { ok: false, motivo: "servicio", texto: "" }
+    if (base64.length > 1_000_000) {
+      return { ok: false, motivo: "servicio", texto: "El PDF pesa más de 1 MB y OCR.space no lo acepta." }
+    }
     let leido = await pedirTexto(base64, "1", "application/pdf", "PDF")
     if (!leido.texto) leido = await pedirTexto(base64, "2", "application/pdf", "PDF")
-    if (!leido.texto) return { ok: false, motivo: "servicio" }
-    const lectura = leerTexto(leido.texto)
-    if (lectura.monto == null && lectura.documentos.length === 0) return { ok: false, motivo: "sin_datos" }
-    return { ok: true, lectura }
+    if (!leido.texto) return { ok: false, motivo: "servicio", texto: leido.error }
+    return interpretar(leido.texto)
   } catch (error) {
-    const nombre = error instanceof Error ? error.name : ""
-    if (nombre === "AbortError" || nombre === "TypeError") return { ok: false, motivo: "sin_red" }
-    return { ok: false, motivo: "servicio" }
+    return falla(error, "")
   }
 }

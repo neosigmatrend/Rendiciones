@@ -117,6 +117,8 @@ export function Formulario({
   const [foliosCandidatos, setFoliosCandidatos] = useState<DocumentoLeido[]>([])
   const [folioActivo, setFolioActivo] = useState<string | null>(null)
   const [montoManual, setMontoManual] = useState(Boolean(pago))
+  const [textosLeidos, setTextosLeidos] = useState<Map<string, string>>(new Map())
+  const [verTexto, setVerTexto] = useState(false)
   const camaraAbierta = useRef(false)
 
   function actualizarDocumento(key: string, cambios: Partial<Borrador>) {
@@ -203,15 +205,18 @@ export function Formulario({
     setAvisoLectura(null)
     const lecturas: Lectura[] = []
     const motivos: Array<"sin_datos" | "sin_red" | "servicio"> = []
+    const textos = new Map<string, string>()
     try {
       for (let indice = 0; indice < siguientes.length; indice++) {
         if (indice > 0) await esperar(1100)
         const foto = siguientes[indice]
         if (!foto) continue
         const resultadoFoto = foto.esPdf ? await leerPdf(foto.uri) : await leerFoto(foto.uri, foto.ancho)
+        textos.set(foto.key, resultadoFoto.texto)
         if (resultadoFoto.ok) lecturas.push(resultadoFoto.lectura)
         else motivos.push(resultadoFoto.motivo)
       }
+      setTextosLeidos((actuales) => new Map([...actuales, ...textos]))
       if (lecturas.length === 0) {
         setLecturaFallida(true)
         setCorrigiendo(true)
@@ -294,7 +299,11 @@ export function Formulario({
         monto: montoNumero,
         tarjeta: tarjeta.trim(),
         documentos: documentosLimpios,
-        fotosNuevas: fotosNuevas.map((foto) => ({ uri: foto.uri, nombre: foto.nombre })),
+        fotosNuevas: fotosNuevas.map((foto) => ({
+          uri: foto.uri,
+          nombre: foto.nombre,
+          texto: textosLeidos.get(foto.key),
+        })),
         fotosConservadas: fotosGuardadas,
       })
       onGuardado(guardado.id)
@@ -320,12 +329,13 @@ export function Formulario({
   const fotoPrincipal = capturaPrincipal?.uri ?? fotosGuardadas[0]?.uri
   const nombrePrincipal = capturaPrincipal?.nombre ?? fotosGuardadas[0]?.nombre ?? ""
   const pdfPrincipal = capturaPrincipal?.esPdf ?? /\.pdf$/i.test(nombrePrincipal)
+  const textoLeido = capturaPrincipal ? textosLeidos.get(capturaPrincipal.key) : fotosGuardadas[0]?.texto
 
   if (paso === "capturar") {
     return (
       <ScrollView contentContainerStyle={estilos.contenido}>
         <Text style={estilos.titulo}>Capturar pago</Text>
-        <Text style={estilos.version}>versión 12</Text>
+        <Text style={estilos.version}>versión 13</Text>
         <Text style={estilos.ayuda}>
           Fotografía la boleta o la pantalla del pago. La app lee el monto y los folios, comprueba que sumen el cargo y te pide confirmar.
         </Text>
@@ -578,6 +588,22 @@ export function Formulario({
           variante="secundario"
           onPress={() => setCorrigiendo((actual) => !actual)}
         />
+        {textoLeido ? (
+          <>
+            <Boton
+              titulo={verTexto ? "Ocultar texto leído" : "Ver texto leído"}
+              variante="secundario"
+              onPress={() => setVerTexto((actual) => !actual)}
+            />
+            {verTexto ? (
+              <View style={estilos.archivo}>
+                <Text selectable style={estilos.textoOcr}>
+                  {textoLeido}
+                </Text>
+              </View>
+            ) : null}
+          </>
+        ) : null}
         <View style={estilos.acciones}>
           <Boton titulo="Otra captura" variante="secundario" onPress={() => elegirCapturas("galeria")} disabled={guardando} />
           <Boton titulo="Tomar otra foto" variante="secundario" onPress={() => elegirCapturas("camara")} disabled={guardando} />
@@ -702,6 +728,7 @@ const estilos = StyleSheet.create({
     gap: 4,
     padding: 14,
   },
+  textoOcr: { color: colores.tinta, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace", fontSize: 12, lineHeight: 17 },
   emparejar: {
     backgroundColor: colores.tarjeta,
     borderRadius: 14,

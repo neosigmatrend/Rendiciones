@@ -6,6 +6,7 @@ export type Foto = {
   id: string
   nombre: string
   uri: string
+  texto?: string
 }
 
 export type Documento = {

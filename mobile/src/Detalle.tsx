@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native"
+import { Alert, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native"
 import { usePagos } from "./contexto"
 import { etiquetaTipo, formatCLP, formatFecha, formatFechaLarga } from "./format"
 import { Boton, PanelTotal, colores } from "./ui"
@@ -18,6 +18,8 @@ export function Detalle({
   const { pagos, borrar } = usePagos()
   const pago = pagos.find((item) => item.id === id)
   const [fotoAbierta, setFotoAbierta] = useState<string | null>(null)
+  const [verTexto, setVerTexto] = useState(false)
+  const textoLeido = pago?.fotos.find((foto) => foto.texto?.trim())?.texto
 
   if (!pago) {
     return (
@@ -91,6 +93,22 @@ export function Detalle({
           </View>
         ))
       )}
+      {textoLeido ? (
+        <>
+          <Boton
+            titulo={verTexto ? "Ocultar texto leído" : "Ver texto leído"}
+            variante="secundario"
+            onPress={() => setVerTexto((actual) => !actual)}
+          />
+          {verTexto ? (
+            <View style={estilos.documento}>
+              <Text selectable style={estilos.textoOcr}>
+                {textoLeido}
+              </Text>
+            </View>
+          ) : null}
+        </>
+      ) : null}
       <Boton titulo="Editar" variante="secundario" onPress={onEditar} />
       <Boton titulo="Eliminar" variante="peligro" onPress={confirmarBorrado} />
 
@@ -127,6 +145,7 @@ const estilos = StyleSheet.create({
   fotos: { gap: 8 },
   foto: { backgroundColor: "#DDD6C8", borderRadius: 12, height: 140, width: 180 },
   fotoArchivo: { justifyContent: "center", padding: 12 },
+  textoOcr: { color: colores.tinta, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace", fontSize: 12, lineHeight: 17 },
   documento: {
     alignItems: "center",
     backgroundColor: colores.tarjeta,

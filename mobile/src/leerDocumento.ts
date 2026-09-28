@@ -176,8 +176,13 @@ function sinAcento(texto: string) {
 function rolCercano(fragmento: string): RolMonto {
   const lineas = sinAcento(fragmento).split("\n")
   const ultima = lineas[lineas.length - 1] ?? ""
+  if (/[a-z]/.test(ultima)) return rolDeLinea(ultima)
   const anterior = lineas[lineas.length - 2] ?? ""
-  return rolDeLinea(/[a-z]/.test(ultima) ? ultima : `${anterior}\n${ultima}`)
+  return esEncabezado(anterior) ? null : rolDeLinea(`${anterior}\n${ultima}`)
+}
+
+function esEncabezado(linea: string): boolean {
+  return linea.trim().split(/\s+/).filter(Boolean).length > 4
 }
 
 function rolDeLinea(texto: string): RolMonto {
@@ -485,14 +490,13 @@ export function leerTexto(entrada: string): Lectura {
   const utiles = montos.filter((monto) => !monto.ignorar)
   const igualPalabras = palabras != null ? utiles.find((monto) => monto.valor === palabras)?.valor ?? null : null
   const cargo = cargoDe(montos)
-  const unico = utiles.length === 1 ? utiles[0].valor : null
+  const valoresUtiles = new Set(utiles.map((monto) => monto.valor))
+  const unico = valoresUtiles.size === 1 ? utiles[0].valor : null
   const suma = emparejados.reduce((acumulado, documento) => acumulado + documento.monto, 0)
   const monto =
     comprobado ?? cargo ?? total ?? subtotal ?? igualPalabras ?? (emparejados.length > 0 ? suma : null) ?? unico ?? palabras
   const documentos =
-    emparejados.length === 0 && foliosCandidatos.length === 1 && monto != null
-      ? [{ ...foliosCandidatos[0], monto }]
-      : emparejados
+    foliosCandidatos.length === 1 && monto != null ? [{ ...foliosCandidatos[0], monto }] : emparejados
 
   return {
     monto,

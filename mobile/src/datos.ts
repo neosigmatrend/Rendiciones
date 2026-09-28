@@ -79,7 +79,7 @@ function normalizar(valor: unknown): Pago | null {
         if (!foto || typeof foto !== "object") return []
         const item = foto as Partial<Foto>
         if (typeof item.id !== "string" || typeof item.uri !== "string" || typeof item.nombre !== "string") return []
-        return [{ id: item.id, nombre: item.nombre, uri: item.uri }]
+        return [{ id: item.id, nombre: item.nombre, uri: item.uri, texto: typeof item.texto === "string" ? item.texto : undefined }]
       })
     : []
 
@@ -135,7 +135,7 @@ export type PagoInput = {
   monto: number
   tarjeta: string
   documentos: Omit<Documento, "id">[]
-  fotosNuevas: { uri: string; nombre: string }[]
+  fotosNuevas: { uri: string; nombre: string; texto?: string }[]
   fotosConservadas: Foto[]
 }
 
@@ -153,12 +153,12 @@ function extensionDe(nombre: string) {
   return "jpg"
 }
 
-export async function copiarCaptura(uri: string, nombre: string): Promise<Foto> {
+export async function copiarCaptura(uri: string, nombre: string, texto?: string): Promise<Foto> {
   const carpeta = carpetaCapturas()
   const id = Crypto.randomUUID()
   const archivo = new File(carpeta, `${id}.${extensionDe(nombre || uri)}`)
   await new File(uri).copy(archivo)
-  return { id, nombre: nombre || archivo.name, uri: archivo.uri }
+  return { id, nombre: nombre || archivo.name, uri: archivo.uri, texto }
 }
 
 function borrarCaptura(uri: string) {
@@ -173,7 +173,7 @@ function borrarCaptura(uri: string) {
 export async function crearPago(input: PagoInput): Promise<Pago> {
   const fotos = []
   for (const captura of input.fotosNuevas) {
-    fotos.push(await copiarCaptura(captura.uri, captura.nombre))
+    fotos.push(await copiarCaptura(captura.uri, captura.nombre, captura.texto))
   }
   const ahora = new Date().toISOString()
   const pago: Pago = {
@@ -202,7 +202,7 @@ export async function actualizarPago(id: string, input: PagoInput): Promise<Pago
   actual.fotos.filter((foto) => !conservadas.has(foto.id)).forEach((foto) => borrarCaptura(foto.uri))
   const nuevas = []
   for (const captura of input.fotosNuevas) {
-    nuevas.push(await copiarCaptura(captura.uri, captura.nombre))
+    nuevas.push(await copiarCaptura(captura.uri, captura.nombre, captura.texto))
   }
   const actualizado: Pago = {
     ...actual,
