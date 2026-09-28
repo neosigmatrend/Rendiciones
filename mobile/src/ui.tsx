@@ -37,22 +37,23 @@ export function MarcaCuadre({ cuadre }: { cuadre: Cuadre }) {
   )
 }
 
-export function PanelCuadre({
+export function PanelTotal({
   monto,
   documentos,
 }: {
   monto: number
   documentos: Pick<Documento, "folio" | "monto">[]
 }) {
-  const cuadre = cuadreDe(monto, documentos)
+  const conMonto = documentos.filter((documento) => documento.monto > 0)
   return (
     <View style={estilos.panel}>
-      <View style={estilos.panelFila}>
-        <Dato etiqueta="Monto del pago" valor={formatCLP(monto || 0)} />
-        <Dato etiqueta="Documentos" valor={formatCLP(cuadre.suma)} />
-        <Dato etiqueta="Diferencia" valor={formatCLP(Math.abs(cuadre.diferencia))} />
-      </View>
-      <MarcaCuadre cuadre={cuadre} />
+      <Text style={estilos.totalEtiqueta}>Total que buscas en la tarjeta</Text>
+      <Text style={estilos.totalValor}>{formatCLP(monto || 0)}</Text>
+      <Text style={estilos.totalDetalle}>
+        {conMonto.length === 0
+          ? "Sin documentos asociados"
+          : conMonto.map((documento) => formatCLP(documento.monto)).join("  +  ")}
+      </Text>
     </View>
   )
 }
@@ -118,6 +119,9 @@ const estilos = StyleSheet.create({
     padding: 14,
   },
   panelFila: { flexDirection: "row", gap: 8 },
+  totalEtiqueta: { color: colores.muted, fontSize: 12, fontWeight: "700", textTransform: "uppercase" },
+  totalValor: { color: colores.tinta, fontSize: 32, fontWeight: "700" },
+  totalDetalle: { color: colores.muted, fontSize: 14 },
   dato: { flex: 1, gap: 2 },
   datoEtiqueta: {
     color: colores.muted,

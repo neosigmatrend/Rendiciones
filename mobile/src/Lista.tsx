@@ -5,7 +5,7 @@ import { File, Paths } from "expo-file-system"
 import { usePagos } from "./contexto"
 import { cuadreDe, etiquetaCuadre, etiquetaMes, etiquetaTipo, formatCLP, formatFecha, mesDeFecha } from "./format"
 import type { Pago } from "./types"
-import { Boton, MarcaCuadre, colores } from "./ui"
+import { Boton, colores } from "./ui"
 
 export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onNuevo: () => void }) {
   const { pagos, cargando, error } = usePagos()
@@ -13,7 +13,7 @@ export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onN
   const [mes, setMes] = useState<string | null>(null)
   const visibles = mes ? pagos.filter((pago) => mesDeFecha(pago.fecha) === mes) : pagos
   const total = visibles.reduce((suma, pago) => suma + pago.monto, 0)
-  const cuadrados = visibles.filter((pago) => cuadreDe(pago.monto, pago.documentos).estado === "cuadra").length
+  const conDocumentos = visibles.filter((pago) => pago.documentos.length > 0).length
 
   if (cargando) {
     return (
@@ -36,12 +36,12 @@ export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onN
   return (
     <ScrollView contentContainerStyle={estilos.contenido}>
       <Text style={estilos.marca}>Rendiciones</Text>
-      <Text style={estilos.version}>versión 10</Text>
+      <Text style={estilos.version}>versión 11</Text>
       <Text style={estilos.subtitulo}>Pagos con tarjeta</Text>
       <View style={estilos.resumen}>
         <Resumen etiqueta="Pagos" valor={String(visibles.length)} />
         <Resumen etiqueta="En tarjeta" valor={formatCLP(total)} />
-        <Resumen etiqueta="Cuadrados" valor={`${cuadrados}/${visibles.length}`} />
+        <Resumen etiqueta="Con folio" valor={`${conDocumentos}/${visibles.length}`} />
       </View>
       <Boton titulo="Capturar pago" onPress={onNuevo} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={estilos.meses}>
@@ -60,7 +60,6 @@ export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onN
         </View>
       ) : (
         visibles.map((pago) => {
-          const cuadre = cuadreDe(pago.monto, pago.documentos)
           return (
             <Pressable key={pago.id} onPress={() => onAbrir(pago.id)} style={estilos.pago}>
               <View style={estilos.pagoCabeza}>
@@ -75,7 +74,6 @@ export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onN
                 </View>
                 <Text style={estilos.monto}>{formatCLP(pago.monto)}</Text>
               </View>
-              <MarcaCuadre cuadre={cuadre} />
               <Text style={estilos.lineas}>
                 {pago.documentos.length === 0
                   ? "Sin folios todavía"

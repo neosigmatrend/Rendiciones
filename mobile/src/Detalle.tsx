@@ -1,8 +1,8 @@
 import { useState } from "react"
 import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native"
 import { usePagos } from "./contexto"
-import { cuadreDe, etiquetaTipo, formatCLP, formatFecha, formatFechaLarga } from "./format"
-import { Boton, PanelCuadre, colores } from "./ui"
+import { etiquetaTipo, formatCLP, formatFecha, formatFechaLarga } from "./format"
+import { Boton, PanelTotal, colores } from "./ui"
 
 export function Detalle({
   id,
@@ -28,8 +28,6 @@ export function Detalle({
     )
   }
 
-  const cuadre = cuadreDe(pago.monto, pago.documentos)
-
   function confirmarBorrado() {
     const nombre = pago?.proveedor.trim() || "este proveedor"
     Alert.alert("Eliminar este pago", `Se borra el pago de ${nombre}, sus documentos y las capturas.`, [
@@ -53,7 +51,7 @@ export function Detalle({
       <Text style={estilos.titulo}>{pago.proveedor.trim() || "Sin proveedor"}</Text>
       <Text style={estilos.ayuda}>{[pago.descripcion, pago.tarjeta].filter(Boolean).join(" · ")}</Text>
       {pago.ejemplo ? <Text style={estilos.ejemplo}>Ejemplo</Text> : null}
-      <PanelCuadre monto={pago.monto} documentos={pago.documentos} />
+      <PanelTotal monto={pago.monto} documentos={pago.documentos} />
 
       <Text style={estilos.seccion}>Capturas</Text>
       {pago.fotos.length === 0 ? (
@@ -70,7 +68,7 @@ export function Detalle({
 
       <Text style={estilos.seccion}>Documentos</Text>
       {pago.documentos.length === 0 ? (
-        <Text style={estilos.vacio}>Todavía no hay facturas ni boletas. El cargo queda pendiente de cuadre.</Text>
+        <Text style={estilos.vacio}>Este pago no tiene facturas ni boletas asociadas.</Text>
       ) : (
         pago.documentos.map((documento) => (
           <View key={documento.id} style={estilos.documento}>
@@ -85,7 +83,6 @@ export function Detalle({
           </View>
         ))
       )}
-      <Text style={estilos.estado}>{cuadre.estado === "cuadra" ? "La suma cierra con el cargo." : "La suma todavía no cierra con el cargo."}</Text>
       <Boton titulo="Editar" variante="secundario" onPress={onEditar} />
       <Boton titulo="Eliminar" variante="peligro" onPress={confirmarBorrado} />
 

@@ -31,7 +31,7 @@ import { combinarLecturas, type DocumentoLeido, type Lectura, type MontoCandidat
 import { leerFoto } from "./leerFoto"
 import type { Foto, Pago, TipoDocumento } from "./types"
 import { TIPOS_DOCUMENTO } from "./types"
-import { Boton, PanelCuadre, colores } from "./ui"
+import { Boton, PanelTotal, colores } from "./ui"
 
 type Borrador = {
   key: string
@@ -68,15 +68,10 @@ function mensajeLecturaFallida(motivos: Array<"sin_datos" | "sin_red" | "servici
 }
 
 function mensajeLectura(lectura: Lectura): string {
-  const estado = cuadreDe(lectura.monto ?? 0, lectura.documentos).estado
+  if (lectura.documentos.length === 1) return "Leí 1 folio con su monto. Confírmalo."
+  if (lectura.documentos.length > 1) return `Leí ${lectura.documentos.length} folios con sus montos. Confírmalos.`
   if (lectura.monto == null) return "No encontré el monto en la captura."
-  if (estado === "cuadra") {
-    return lectura.documentos.length === 1
-      ? "Leí 1 folio y suma el monto. Confírmalo."
-      : `Leí ${lectura.documentos.length} folios y suman el monto. Confírmalos.`
-  }
-  if (estado === "sin_documentos") return "Leí el monto. Esta captura no trae folios."
-  return "Los montos leídos no cuadran. Corrígelos antes de confirmar."
+  return "Leí el monto. Esta captura no trae folios."
 }
 
 function borradoresIniciales(pago?: Pago): Borrador[] {
@@ -120,6 +115,7 @@ export function Formulario({
   const [montosCandidatos, setMontosCandidatos] = useState<MontoCandidato[]>([])
   const [foliosCandidatos, setFoliosCandidatos] = useState<DocumentoLeido[]>([])
   const [folioActivo, setFolioActivo] = useState<string | null>(null)
+  const [montoManual, setMontoManual] = useState(Boolean(pago))
   const camaraAbierta = useRef(false)
 
   function actualizarDocumento(key: string, cambios: Partial<Borrador>) {
@@ -134,9 +130,9 @@ export function Formulario({
     setDocumentos(lectura.documentos.map((documento, indice) => borradorLeido(documento, indice)))
     setMontosCandidatos(lectura.montosCandidatos)
     setFoliosCandidatos(lectura.foliosCandidatos)
-    const estado = cuadreDe(lectura.monto ?? 0, lectura.documentos).estado
-    setCorrigiendo(lectura.monto == null || estado === "falta" || estado === "sobra")
-    setLecturaFallida(lectura.monto == null)
+    setMontoManual(lectura.documentos.length === 0)
+    setCorrigiendo(false)
+    setLecturaFallida(lectura.monto == null && lectura.documentos.length === 0)
     setAvisoLectura(mensajeLectura(lectura))
   }
 
@@ -227,15 +223,15 @@ export function Formulario({
     void elegirCapturas("camara")
   }, [pago])
 
-  async function onGuardar(forzar: boolean) {
-    const montoNumero = parseCLP(monto)
+  async function onGuardar() {
+    const montoNumero = montoEfectivo
     if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
       Alert.alert("Falta la fecha", "Indica la fecha del pago.")
       return
     }
-    if (montoNumero == null || montoNumero <= 0) {
+    if (montoNumero <= 0) {
       setCorrigiendo(true)
-      Alert.alert("Falta el monto", "La captura no trajo el monto del cargo.")
+      Alert.alert("Falta el total", "Empareja un folio con su monto o escribe el total.")
       return
     }
     if (!tarjeta.trim()) {
@@ -257,12 +253,6 @@ export function Formulario({
         monto: montoDocumento,
         tipo: documento.tipo,
       })
-    }
-    const estado = cuadreDe(montoNumero, documentosLimpios).estado
-    if (!forzar && estado !== "cuadra" && estado !== "sin_documentos") {
-      setCorrigiendo(true)
-      Alert.alert("No cuadra", "Los folios no suman el monto del cargo.")
-      return
     }
     if (fotosGuardadas.length + fotosNuevas.length > 8) {
       Alert.alert("Demasiadas capturas", "Puedes adjuntar hasta 8 capturas por pago.")
@@ -297,15 +287,16 @@ export function Formulario({
   const foliosDisponibles = foliosCandidatos.filter(
     (candidato) => !documentos.some((documento) => documento.folio === candidato.folio),
   )
-  const cuadre = cuadreDe(parseCLP(monto) ?? 0, documentosParaCuadre)
-  const puedeConfirmar = cuadre.estado === "cuadra" || cuadre.estado === "sin_documentos"
+  const sumaDocumentos = documentosParaCuadre.reduce((total, documento) => total + documento.monto, 0)
+  const montoEfectivo = !montoManual && sumaDocumentos > 0 ? sumaDocumentos : parseCLP(monto) ?? 0
+  const puedeConfirmar = montoEfectivo > 0
   const fotoPrincipal = fotosNuevas[fotosNuevas.length - 1]?.uri ?? fotosGuardadas[0]?.uri
 
   if (paso === "capturar") {
     return (
       <ScrollView contentContainerStyle={estilos.contenido}>
         <Text style={estilos.titulo}>Capturar pago</Text>
-        <Text style={estilos.version}>versión 10</Text>
+        <Text style={estilos.version}>versión 11</Text>
         <Text style={estilos.ayuda}>
           Fotografía la boleta o la pantalla del pago. La app lee el monto y los folios, comprueba que sumen el cargo y te pide confirmar.
         </Text>
@@ -334,7 +325,7 @@ export function Formulario({
         <Text style={estilos.ayuda}>
           {puedeConfirmar
             ? "Esto es lo que leí en la captura. Si está bien, confirma."
-            : "Los folios no suman el monto. Corrige lo que esté mal y después confirma."}
+            : "Falta el total. Empareja un folio con su monto o escríbelo abajo."}
         </Text>
         {avisoLectura ? <Text style={[estilos.aviso, lecturaFallida && estilos.avisoError]}>{avisoLectura}</Text> : null}
         {fotoPrincipal ? <Image source={{ uri: fotoPrincipal }} style={estilos.fotoGrande} /> : null}
@@ -365,26 +356,6 @@ export function Formulario({
           ) : null}
         </DatoLeido>
 
-        <DatoLeido
-          etiqueta="Monto del cargo"
-          valor={parseCLP(monto) != null ? formatCLP(parseCLP(monto) ?? 0) : ""}
-          vacio="Sin monto"
-          editable={corrigiendo || !(parseCLP(monto) ?? 0)}
-        >
-          <TextInput
-            value={monto}
-            onChangeText={setMonto}
-            onBlur={() => {
-              const valor = parseCLP(monto)
-              if (valor != null) setMonto(formatMontoInput(valor))
-            }}
-            keyboardType="number-pad"
-            placeholder="Monto"
-            placeholderTextColor="#8B938C"
-            style={estilos.input}
-          />
-        </DatoLeido>
-
         {descripcion || corrigiendo ? (
           <DatoLeido etiqueta="Descripción" valor={descripcion} vacio="Sin descripción" editable={corrigiendo}>
             <TextInput
@@ -395,29 +366,6 @@ export function Formulario({
               style={estilos.input}
             />
           </DatoLeido>
-        ) : null}
-
-        {montosCandidatos.length > 1 ? (
-          <>
-            <Text style={estilos.seccion}>Montos en la captura</Text>
-            <Text style={estilos.ayuda}>Toca el que te cobraron en la tarjeta.</Text>
-            <View style={estilos.chips}>
-              {montosCandidatos.map((candidato) => {
-                const elegido = (parseCLP(monto) ?? 0) === candidato.valor
-                return (
-                  <Pressable
-                    key={`${candidato.valor}-${candidato.etiqueta}`}
-                    onPress={() => setMonto(formatMontoInput(candidato.valor))}
-                    style={[estilos.chip, elegido && estilos.chipActivo]}
-                  >
-                    <Text style={[estilos.chipTexto, elegido && estilos.chipTextoActivo]}>
-                      {formatCLP(candidato.valor)} · {candidato.etiqueta}
-                    </Text>
-                  </Pressable>
-                )
-              })}
-            </View>
-          </>
         ) : null}
 
         <Text style={estilos.seccion}>Documentos</Text>
@@ -549,7 +497,26 @@ export function Formulario({
           />
         ) : null}
 
-        <PanelCuadre monto={parseCLP(monto) ?? 0} documentos={documentosParaCuadre} />
+        <PanelTotal monto={montoEfectivo} documentos={documentosParaCuadre} />
+        {documentos.length === 0 || corrigiendo ? (
+          <Campo etiqueta="Total del cargo">
+            <TextInput
+              value={monto}
+              onChangeText={(valor) => {
+                setMontoManual(true)
+                setMonto(valor)
+              }}
+              onBlur={() => {
+                const valor = parseCLP(monto)
+                if (valor != null) setMonto(formatMontoInput(valor))
+              }}
+              keyboardType="number-pad"
+              placeholder="Monto"
+              placeholderTextColor="#8B938C"
+              style={estilos.input}
+            />
+          </Campo>
+        ) : null}
 
         <Campo etiqueta="Tarjeta">
           {tarjetas.length > 0 ? (
@@ -587,14 +554,9 @@ export function Formulario({
         </View>
         <Boton
           titulo={guardando ? "Guardando…" : pago ? "Guardar cambios" : "Confirmar pago"}
-          onPress={() => onGuardar(false)}
+          onPress={() => void onGuardar()}
           disabled={guardando || !puedeConfirmar}
         />
-        {!puedeConfirmar ? (
-          <Pressable onPress={() => onGuardar(true)} disabled={guardando}>
-            <Text style={estilos.quitar}>Confirmar aunque no cuadre</Text>
-          </Pressable>
-        ) : null}
         <Boton titulo="Cancelar" variante="secundario" onPress={onCancelar} />
       </ScrollView>
     </KeyboardAvoidingView>
