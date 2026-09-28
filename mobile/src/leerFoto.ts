@@ -1,4 +1,5 @@
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator"
+import { File } from "expo-file-system"
 import { leerTexto, type Lectura } from "./leerDocumento"
 
 const OCR_URL = "https://api.ocr.space/parse/image"
@@ -31,15 +32,20 @@ async function jpegBase64(uri: string, ancho: number | undefined): Promise<strin
   return menor.base64 ?? imagen.base64 ?? null
 }
 
-async function pedirTexto(base64: string, motor: "1" | "2"): Promise<{ texto: string; error: string }> {
+async function pedirTexto(
+  base64: string,
+  motor: "1" | "2",
+  mime: "image/jpeg" | "application/pdf",
+  filetype: "JPG" | "PDF",
+): Promise<{ texto: string; error: string }> {
   const cuerpo = new FormData()
-  cuerpo.append("base64Image", `data:image/jpeg;base64,${base64}`)
+  cuerpo.append("base64Image", `data:${mime};base64,${base64}`)
   cuerpo.append("language", "spa")
   cuerpo.append("isOverlayRequired", "false")
   cuerpo.append("OCREngine", motor)
   cuerpo.append("scale", "true")
   cuerpo.append("detectOrientation", "true")
-  cuerpo.append("filetype", "JPG")
+  cuerpo.append("filetype", filetype)
 
   const control = new AbortController()
   const plazo = setTimeout(() => control.abort(), 30_000)
@@ -69,8 +75,26 @@ export async function leerFoto(uri: string, ancho?: number): Promise<ResultadoFo
   try {
     const jpeg = await jpegBase64(uri, ancho)
     if (!jpeg) return { ok: false, motivo: "servicio" }
-    let leido = await pedirTexto(jpeg, "1")
-    if (!leido.texto) leido = await pedirTexto(jpeg, "2")
+    let leido = await pedirTexto(jpeg, "1", "image/jpeg", "JPG")
+    if (!leido.texto) leido = await pedirTexto(jpeg, "2", "image/jpeg", "JPG")
+    if (!leido.texto) return { ok: false, motivo: "servicio" }
+    const lectura = leerTexto(leido.texto)
+    if (lectura.monto == null && lectura.documentos.length === 0) return { ok: false, motivo: "sin_datos" }
+    return { ok: true, lectura }
+  } catch (error) {
+    const nombre = error instanceof Error ? error.name : ""
+    if (nombre === "AbortError" || nombre === "TypeError") return { ok: false, motivo: "sin_red" }
+    return { ok: false, motivo: "servicio" }
+  }
+}
+
+export async function leerPdf(uri: string): Promise<ResultadoFoto> {
+  try {
+    const archivo = new File(uri)
+    const base64 = await archivo.base64()
+    if (!base64 || base64.length > 1_000_000) return { ok: false, motivo: "servicio" }
+    let leido = await pedirTexto(base64, "1", "application/pdf", "PDF")
+    if (!leido.texto) leido = await pedirTexto(base64, "2", "application/pdf", "PDF")
     if (!leido.texto) return { ok: false, motivo: "servicio" }
     const lectura = leerTexto(leido.texto)
     if (lectura.monto == null && lectura.documentos.length === 0) return { ok: false, motivo: "sin_datos" }

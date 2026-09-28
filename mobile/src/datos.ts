@@ -149,7 +149,7 @@ function extensionDe(nombre: string) {
   const coincidencia = nombre.toLowerCase().match(/\.([a-z0-9]+)$/)
   const extension = coincidencia?.[1]
   if (extension === "jpeg") return "jpg"
-  if (extension && ["jpg", "png", "webp", "gif", "heic"].includes(extension)) return extension
+  if (extension && ["jpg", "png", "webp", "gif", "heic", "pdf"].includes(extension)) return extension
   return "jpg"
 }
 
