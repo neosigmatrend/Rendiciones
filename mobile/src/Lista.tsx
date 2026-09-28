@@ -36,6 +36,7 @@ export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onN
   return (
     <ScrollView contentContainerStyle={estilos.contenido}>
       <Text style={estilos.marca}>Rendiciones</Text>
+      <Text style={estilos.version}>versión 4</Text>
       <Text style={estilos.subtitulo}>Pagos con tarjeta</Text>
       <View style={estilos.resumen}>
         <Resumen etiqueta="Pagos" valor={String(visibles.length)} />
@@ -152,7 +153,8 @@ const estilos = StyleSheet.create({
   contenido: { gap: 12, padding: 16, paddingBottom: 40 },
   centrado: { alignItems: "center", flex: 1, gap: 8, justifyContent: "center", padding: 24 },
   marca: { color: colores.primario, fontSize: 32, fontWeight: "700" },
-  subtitulo: { color: colores.muted, fontSize: 15, marginTop: -8 },
+  version: { color: colores.primario, fontSize: 22, fontWeight: "700", marginTop: -6 },
+  subtitulo: { color: colores.muted, fontSize: 15, marginTop: -4 },
   titulo: { color: colores.tinta, fontSize: 24, fontWeight: "700" },
   ayuda: { color: colores.muted, fontSize: 14, lineHeight: 20 },
   resumen: { flexDirection: "row", gap: 8 },

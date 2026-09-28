@@ -280,6 +280,7 @@ export function Formulario({
     return (
       <ScrollView contentContainerStyle={estilos.contenido}>
         <Text style={estilos.titulo}>Capturar pago</Text>
+        <Text style={estilos.version}>versión 4</Text>
         <Text style={estilos.ayuda}>
           Toma o adjunta la pantalla del pago. La app lee el monto y los folios, comprueba que sumen el cargo y te pide confirmar.
         </Text>
@@ -544,6 +545,7 @@ const estilos = StyleSheet.create({
   contenido: { gap: 12, padding: 16, paddingBottom: 40 },
   leyendo: { alignItems: "center", flex: 1, gap: 16, justifyContent: "center", padding: 24 },
   titulo: { color: colores.tinta, fontSize: 28, fontWeight: "700" },
+  version: { color: colores.primario, fontSize: 22, fontWeight: "700" },
   tituloChico: { color: colores.tinta, fontSize: 18, fontWeight: "700" },
   seccion: { color: colores.tinta, fontSize: 20, fontWeight: "700", marginTop: 8 },
   ayuda: { color: colores.muted, fontSize: 15, lineHeight: 21 },
