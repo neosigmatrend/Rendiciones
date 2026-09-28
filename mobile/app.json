@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "Rendiciones",
+    "slug": "rendiciones",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "scheme": "rendiciones",
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Rendiciones adjunta la captura de la pantalla de pago.",
+        "NSCameraUsageDescription": "Rendiciones puede fotografiar el comprobante del pago."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1E4C55",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Rendiciones adjunta la captura de la pantalla de pago.",
+          "cameraPermission": "Rendiciones puede fotografiar el comprobante del pago."
+        }
+      ],
+      "expo-sharing",
+      "@react-native-community/datetimepicker"
+    ]
+  }
+}

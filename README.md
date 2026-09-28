@@ -1,23 +1,22 @@
 # Rendiciones
 
-Registro de pagos con tarjeta para armar la rendición del mes. Cada pago guarda la captura de la pantalla y las facturas o boletas que lo componen. Varios documentos pueden sumar un solo cargo, como en un pago de Agrosuper o Gasco.
+App para el teléfono. Al pagar con tarjeta registras el cargo, adjuntas la captura de la pantalla y anotas las facturas o boletas que suman ese monto.
 
-## Qué hace
+## Abrirla en Expo Go
 
-- Registrar el pago en el momento: fecha, proveedor, monto, tarjeta y captura.
-- Agregar uno o más folios. La suma se compara con el monto del cargo.
-- Dejar el folio pendiente si la factura o la boleta todavía no está.
-- Exportar la rendición del mes en CSV, lista para abrir en Excel.
-
-Mercado Libre y Mercado Pago quedan fuera de esta versión.
-
-## Cómo correrlo
+1. Instala Expo Go en el teléfono.
+2. En esta carpeta `mobile`, ejecuta:
 
 ```bash
+cd mobile
 npm install
-npm run dev
+npx expo start --tunnel
 ```
 
-La app queda en [http://127.0.0.1:3847](http://127.0.0.1:3847).
+3. Escanea el código QR con Expo Go (Android) o con la cámara (iPhone). También puedes pegar la dirección `exp://` en Expo Go.
 
-Los pagos y las capturas se guardan en `data/` en este equipo. Esa carpeta no se versiona.
+Los pagos quedan guardados en el teléfono. Agrosuper, Gasco y Aguas Andinas aparecen como ejemplos la primera vez.
+
+## Web
+
+En la raíz del repositorio también hay una versión web (`npm run dev`, puerto 3847). La app para usar al pagar es la de Expo Go.
