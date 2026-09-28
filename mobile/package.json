@@ -7,6 +7,7 @@
     "@react-native-community/datetimepicker": "9.1.0",
     "expo": "~57.0.25",
     "expo-crypto": "~57.0.3",
+    "expo-document-picker": "~57.0.2",
     "expo-file-system": "~57.0.7",
     "expo-image-manipulator": "~57.0.20",
     "expo-image-picker": "~57.0.20",
@@ -21,6 +22,7 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
+    "actualizar": "git -C .. pull --ff-only && npm install && expo start --clear",
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",

@@ -16,14 +16,18 @@ npx expo start
 
 El teléfono y el Mac en la misma red Wi-Fi. Escanea el QR con Expo Go.
 
-Cuando haya un cambio, en esa misma carpeta:
+## Actualizar
+
+Cuando haya un cambio, detén Expo con `Ctrl+C` y ejecuta un solo comando:
 
 ```bash
-cd ~/Desktop/Proyectos/Rendiciones
-git pull
+cd ~/Desktop/Proyectos/Rendiciones/mobile
+npm run actualizar
 ```
 
-En la terminal donde sigue corriendo Expo, pulsa `r`. El iPhone recarga. No se baja otro ZIP y no se cambia de carpeta.
+Baja lo nuevo de GitHub, instala lo que falte y levanta Expo con la caché limpia. Escanea el QR otra vez. La primera pantalla muestra el número de versión, así sabes si el teléfono cargó el cambio.
+
+No se baja otro ZIP y no se cambia de carpeta.
 
 Los pagos quedan guardados en el teléfono. Agrosuper, Gasco y Aguas Andinas aparecen como ejemplos la primera vez.
 
