@@ -17,6 +17,8 @@ npx expo start
 
 Los pagos quedan guardados en el teléfono. Agrosuper, Gasco y Aguas Andinas aparecen como ejemplos la primera vez.
 
+La carpeta se clona una vez desde GitHub. Para traer un cambio después, en esa misma carpeta: `git pull`. En la terminal donde corre Expo, pulsa `r`. El teléfono recarga esa carpeta. No hace falta bajar otro ZIP.
+
 La captura se envía a OCR.space para leerla. El teléfono necesita internet. Si la lectura no cuadra, se corrige antes de confirmar. Si no logra leerla, la foto queda y esos datos se completan en la confirmación.
 
 ## Web
