@@ -230,4 +230,24 @@ assert.deepEqual(
 assert.deepEqual(leerTexto(gasco).foliosCandidatos.map((item) => item.folio), ["12214585", "12210001", "12215855"])
 assert.deepEqual(leerTexto(gasco).documentos.map((item) => item.folio), ["12214585", "12215855"])
 
+const gascoCuotas = `
+Detalle de cuenta a pagar
+Documento N° 11985932 Recarga
+1 Cuota seleccionada - $286.939
+Documento N° 11985934 Recarga
+1 Cuota seleccionada - $177.494
+Documento N° 12004244 Recarga
+Documento N° 12004249 Recarga
+Cargo por convenio 14.420
+`
+assert.deepEqual(
+  leerTexto(gascoCuotas).foliosCandidatos.map((item) => item.folio),
+  ["11985932", "11985934", "12004244", "12004249"],
+)
+assert.deepEqual(
+  leerTexto(gascoCuotas).documentos.map((item) => `${item.folio} ${item.monto}`),
+  ["11985932 286939", "11985934 177494"],
+)
+assert.equal(leerTexto(gascoCuotas).monto, 464433)
+
 console.log("candidatos ok")

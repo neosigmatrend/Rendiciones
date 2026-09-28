@@ -66,6 +66,8 @@ const FECHA_TEXTO_RE =
 
 const FECHA_NUMERO_RE = /\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})\b/g
 
+const DISTANCIA_FOLIO_MONTO = 120
+
 type Intervalo = { index: number; fin: number }
 
 type RolMonto = "total" | "cargo" | "vuelto" | "iva" | "neto" | "subtotal" | null
@@ -172,7 +174,13 @@ function sinAcento(texto: string) {
 }
 
 function rolCercano(fragmento: string): RolMonto {
-  const texto = sinAcento(fragmento)
+  const lineas = sinAcento(fragmento).split("\n")
+  const ultima = lineas[lineas.length - 1] ?? ""
+  const anterior = lineas[lineas.length - 2] ?? ""
+  return rolDeLinea(/[a-z]/.test(ultima) ? ultima : `${anterior}\n${ultima}`)
+}
+
+function rolDeLinea(texto: string): RolMonto {
   const marcas: [Exclude<RolMonto, null>, RegExp][] = [
     ["iva", /total\s*iva/g],
     ["iva", /(?<![a-z])iva(?![a-z])/g],
@@ -410,6 +418,8 @@ export function leerTexto(entrada: string): Lectura {
   const ivas: number[] = []
   const fechasSueltas: string[] = []
   let actual: DocumentoLeido | null = null
+  let finFolio = 0
+  const marcados = new Set<string>()
 
   function cerrarActual() {
     if (actual && !foliosCandidatos.some((documento) => documento.folio === actual?.folio)) {
@@ -423,6 +433,7 @@ export function leerTexto(entrada: string): Lectura {
     if (token.tipo === "folio") {
       cerrarActual()
       actual = { folio: token.valor, monto: 0, fecha: "", tipo: token.tipoDocumento }
+      finFolio = token.fin
       continue
     }
     if (token.tipo === "fecha") {
@@ -447,7 +458,10 @@ export function leerTexto(entrada: string): Lectura {
       subtotales.push(token.valor)
       continue
     }
-    if (token.tipo === "monto" && actual && actual.monto === 0) actual.monto = token.valor
+    if (token.tipo === "monto" && actual && actual.monto === 0 && token.index - finFolio <= DISTANCIA_FOLIO_MONTO) {
+      actual.monto = token.valor
+      if (/seleccionad/.test(sinAcento(texto.slice(finFolio, token.index)))) marcados.add(actual.folio)
+    }
   }
   cerrarActual()
 
@@ -457,7 +471,9 @@ export function leerTexto(entrada: string): Lectura {
   const iva = ivas.length > 0 ? ivas[ivas.length - 1] : null
   const sumaFiscal = neto != null && iva != null ? neto + iva : null
   const comprobado = [cargoDe(montos), total, subtotal].find((valor) => valor != null && valor === sumaFiscal) ?? null
-  const documentos = elegirDocumentos(pares, comprobado ?? total ?? subtotal, cantidadUtil)
+  const elegidos = pares.filter((documento) => marcados.has(documento.folio))
+  const documentos =
+    elegidos.length > 0 ? elegidos : elegirDocumentos(pares, comprobado ?? total ?? subtotal, cantidadUtil)
   const fechaPago = fechaDePago(texto, tokens) ?? fechasSueltas[0] ?? null
   const palabras = montoEnPalabras(texto)
   const utiles = montos.filter((monto) => !monto.ignorar)
