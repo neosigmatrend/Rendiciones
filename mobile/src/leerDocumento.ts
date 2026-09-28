@@ -316,6 +316,11 @@ function elegirDocumentos(
   return documentos
 }
 
+function esRut(texto: string, index: number, fin: number): boolean {
+  if (/^\s*-\s*[\dkK](?![\dkK])/.test(texto.slice(fin, fin + 4))) return true
+  return /r\.?\s*u\.?\s*t\.?\s*:?\s*$/i.test(texto.slice(Math.max(0, index - 12), index))
+}
+
 function cargoDe(montos: Extract<Token, { tipo: "monto" }>[]): number | null {
   return [...montos].reverse().find((monto) => !monto.ignorar && monto.rol === "cargo")?.valor ?? null
 }
@@ -388,6 +393,7 @@ export function leerTexto(entrada: string): Lectura {
     const index = match.index
     const fin = index + match[0].length
     if (cruza(index, fin, ocupados)) continue
+    if (esRut(texto, index, fin)) continue
     const desde = Math.max(0, index - 120)
     const rol = rolCercano(texto.slice(desde, index))
     ocupados.push({ index, fin })
@@ -472,7 +478,7 @@ export function leerTexto(entrada: string): Lectura {
   const sumaFiscal = neto != null && iva != null ? neto + iva : null
   const comprobado = [cargoDe(montos), total, subtotal].find((valor) => valor != null && valor === sumaFiscal) ?? null
   const elegidos = pares.filter((documento) => marcados.has(documento.folio))
-  const documentos =
+  const emparejados =
     elegidos.length > 0 ? elegidos : elegirDocumentos(pares, comprobado ?? total ?? subtotal, cantidadUtil)
   const fechaPago = fechaDePago(texto, tokens) ?? fechasSueltas[0] ?? null
   const palabras = montoEnPalabras(texto)
@@ -480,10 +486,16 @@ export function leerTexto(entrada: string): Lectura {
   const igualPalabras = palabras != null ? utiles.find((monto) => monto.valor === palabras)?.valor ?? null : null
   const cargo = cargoDe(montos)
   const unico = utiles.length === 1 ? utiles[0].valor : null
-  const suma = documentos.reduce((acumulado, documento) => acumulado + documento.monto, 0)
+  const suma = emparejados.reduce((acumulado, documento) => acumulado + documento.monto, 0)
+  const monto =
+    comprobado ?? cargo ?? total ?? subtotal ?? igualPalabras ?? (emparejados.length > 0 ? suma : null) ?? unico ?? palabras
+  const documentos =
+    emparejados.length === 0 && foliosCandidatos.length === 1 && monto != null
+      ? [{ ...foliosCandidatos[0], monto }]
+      : emparejados
 
   return {
-    monto: comprobado ?? cargo ?? total ?? subtotal ?? igualPalabras ?? (documentos.length > 0 ? suma : null) ?? unico ?? palabras,
+    monto,
     documentos,
     montosCandidatos: candidatosDeMonto(montos),
     foliosCandidatos,

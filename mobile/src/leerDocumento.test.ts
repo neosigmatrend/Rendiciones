@@ -250,4 +250,31 @@ assert.deepEqual(
 )
 assert.equal(leerTexto(gascoCuotas).monto, 464433)
 
+const facturaElectronica = `
+TOTEAT S.A.
+Giro: ACTIVIDADES DE CONSULTORIA DE INFORMATICA Y DE
+AV NUEVA COSTANERA 3605 OF 011-SANTIAGO-VITACURA
+R.U.T.: 76.363.579-1
+FACTURA ELECTRONICA
+No. 181,176
+S.I.I. - Santiago Oriente
+Señor(es): GARCIA VARGAS RESTAURANTES LTDA
+R.U.T.: 76.930.513-0
+Giro: RESTAURANTES
+No. Código Detalle U.M. Precio Cantidad Descto. Total
+1 010100 TRM Fee Mensual 183,932 1 183,932
+Periodo de Agosto 2026
+Montos Totales
+Neto: 183,932
+Exento: 0
+IVA 19%: 34,947
+Total: 218,879
+`
+assert.equal(leerTexto(facturaElectronica).monto, 218879)
+assert.deepEqual(
+  leerTexto(facturaElectronica).documentos.map((item) => `${item.folio} ${item.monto}`),
+  ["181176 218879"],
+)
+assert.equal(leerTexto(facturaElectronica).montosCandidatos.some((item) => item.valor === 76363579), false)
+
 console.log("candidatos ok")

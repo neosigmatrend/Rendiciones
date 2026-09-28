@@ -58,11 +58,19 @@ export function Detalle({
         <Text style={estilos.vacio}>Este pago todavía no tiene captura. Puedes adjuntarla al editarlo.</Text>
       ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={estilos.fotos}>
-          {pago.fotos.map((foto) => (
-            <Pressable key={foto.id} onPress={() => setFotoAbierta(foto.uri)}>
-              <Image source={{ uri: foto.uri }} style={estilos.foto} />
-            </Pressable>
-          ))}
+          {pago.fotos.map((foto) =>
+            /\.pdf$/i.test(foto.nombre) ? (
+              <View key={foto.id} style={[estilos.foto, estilos.fotoArchivo]}>
+                <Text style={estilos.folio} numberOfLines={3}>
+                  {foto.nombre}
+                </Text>
+              </View>
+            ) : (
+              <Pressable key={foto.id} onPress={() => setFotoAbierta(foto.uri)}>
+                <Image source={{ uri: foto.uri }} style={estilos.foto} />
+              </Pressable>
+            ),
+          )}
         </ScrollView>
       )}
 
@@ -118,6 +126,7 @@ const estilos = StyleSheet.create({
   vacio: { color: colores.muted, fontSize: 15, lineHeight: 21 },
   fotos: { gap: 8 },
   foto: { backgroundColor: "#DDD6C8", borderRadius: 12, height: 140, width: 180 },
+  fotoArchivo: { justifyContent: "center", padding: 12 },
   documento: {
     alignItems: "center",
     backgroundColor: colores.tarjeta,

@@ -1,4 +1,5 @@
 import DateTimePicker from "@react-native-community/datetimepicker"
+import * as DocumentPicker from "expo-document-picker"
 import * as ImagePicker from "expo-image-picker"
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import {
@@ -28,7 +29,7 @@ import {
   parseCLP,
 } from "./format"
 import { combinarLecturas, type DocumentoLeido, type Lectura, type MontoCandidato } from "./leerDocumento"
-import { leerFoto } from "./leerFoto"
+import { leerFoto, leerPdf } from "./leerFoto"
 import type { Foto, Pago, TipoDocumento } from "./types"
 import { TIPOS_DOCUMENTO } from "./types"
 import { Boton, PanelTotal, colores } from "./ui"
@@ -41,7 +42,7 @@ type Borrador = {
   tipo: TipoDocumento
 }
 
-type CapturaNueva = { key: string; uri: string; nombre: string; ancho?: number }
+type CapturaNueva = { key: string; uri: string; nombre: string; ancho?: number; esPdf?: boolean }
 
 type Paso = "capturar" | "leyendo" | "confirmar"
 
@@ -171,6 +172,31 @@ export function Formulario({
       nombre: asset.fileName ?? "captura.jpg",
       ancho: asset.width,
     }))
+    await leerCapturas(siguientes)
+  }
+
+  async function elegirArchivos() {
+    const resultado = await DocumentPicker.getDocumentAsync({
+      type: ["application/pdf", "image/*"],
+      multiple: true,
+      copyToCacheDirectory: true,
+    })
+    if (resultado.canceled) return
+    const cupo = 8 - fotosGuardadas.length - fotosNuevas.length
+    if (cupo <= 0) {
+      Alert.alert("Demasiados archivos", "Puedes adjuntar hasta 8 archivos por pago.")
+      return
+    }
+    const siguientes = resultado.assets.slice(0, cupo).map((asset) => ({
+      key: asset.uri,
+      uri: asset.uri,
+      nombre: asset.name || "documento.pdf",
+      esPdf: asset.mimeType === "application/pdf" || /\.pdf$/i.test(asset.name ?? ""),
+    }))
+    await leerCapturas(siguientes)
+  }
+
+  async function leerCapturas(siguientes: CapturaNueva[]) {
     setFotosNuevas((actuales) => [...actuales, ...siguientes].slice(0, 8))
     setPaso("leyendo")
     setLecturaFallida(false)
@@ -182,7 +208,7 @@ export function Formulario({
         if (indice > 0) await esperar(1100)
         const foto = siguientes[indice]
         if (!foto) continue
-        const resultadoFoto = await leerFoto(foto.uri, foto.ancho)
+        const resultadoFoto = foto.esPdf ? await leerPdf(foto.uri) : await leerFoto(foto.uri, foto.ancho)
         if (resultadoFoto.ok) lecturas.push(resultadoFoto.lectura)
         else motivos.push(resultadoFoto.motivo)
       }
@@ -196,7 +222,7 @@ export function Formulario({
     } catch {
       setLecturaFallida(true)
       setCorrigiendo(true)
-      setAvisoLectura("No pude leer el monto en esta captura.")
+      setAvisoLectura("No pude leer el monto en este documento.")
     } finally {
       setPaso("confirmar")
     }
@@ -290,19 +316,23 @@ export function Formulario({
   const sumaDocumentos = documentosParaCuadre.reduce((total, documento) => total + documento.monto, 0)
   const montoEfectivo = !montoManual && sumaDocumentos > 0 ? sumaDocumentos : parseCLP(monto) ?? 0
   const puedeConfirmar = montoEfectivo > 0
-  const fotoPrincipal = fotosNuevas[fotosNuevas.length - 1]?.uri ?? fotosGuardadas[0]?.uri
+  const capturaPrincipal = fotosNuevas[fotosNuevas.length - 1]
+  const fotoPrincipal = capturaPrincipal?.uri ?? fotosGuardadas[0]?.uri
+  const nombrePrincipal = capturaPrincipal?.nombre ?? fotosGuardadas[0]?.nombre ?? ""
+  const pdfPrincipal = capturaPrincipal?.esPdf ?? /\.pdf$/i.test(nombrePrincipal)
 
   if (paso === "capturar") {
     return (
       <ScrollView contentContainerStyle={estilos.contenido}>
         <Text style={estilos.titulo}>Capturar pago</Text>
-        <Text style={estilos.version}>versión 11</Text>
+        <Text style={estilos.version}>versión 12</Text>
         <Text style={estilos.ayuda}>
           Fotografía la boleta o la pantalla del pago. La app lee el monto y los folios, comprueba que sumen el cargo y te pide confirmar.
         </Text>
         <Text style={estilos.ayuda}>Hace falta internet: la captura se envía a OCR.space para leerla.</Text>
         <Boton titulo="Tomar foto" onPress={() => elegirCapturas("camara")} />
         <Boton titulo="Adjuntar captura" variante="secundario" onPress={() => elegirCapturas("galeria")} />
+        <Boton titulo="Subir archivo o PDF" variante="secundario" onPress={() => void elegirArchivos()} />
         <Boton titulo="Cancelar" variante="secundario" onPress={onCancelar} />
       </ScrollView>
     )
@@ -311,7 +341,7 @@ export function Formulario({
   if (paso === "leyendo") {
     return (
       <View style={estilos.leyendo}>
-        {fotoPrincipal ? <Image source={{ uri: fotoPrincipal }} style={estilos.fotoGrande} /> : null}
+        <Vista uri={fotoPrincipal} nombre={nombrePrincipal} esPdf={pdfPrincipal} />
         <ActivityIndicator color={colores.primario} />
         <Text style={estilos.tituloChico}>Leyendo monto y folios…</Text>
       </View>
@@ -328,7 +358,7 @@ export function Formulario({
             : "Falta el total. Empareja un folio con su monto o escríbelo abajo."}
         </Text>
         {avisoLectura ? <Text style={[estilos.aviso, lecturaFallida && estilos.avisoError]}>{avisoLectura}</Text> : null}
-        {fotoPrincipal ? <Image source={{ uri: fotoPrincipal }} style={estilos.fotoGrande} /> : null}
+        <Vista uri={fotoPrincipal} nombre={nombrePrincipal} esPdf={pdfPrincipal} />
 
         <DatoLeido etiqueta="Proveedor" valor={proveedor} vacio="Sin proveedor" editable={corrigiendo}>
           <TextInput
@@ -552,6 +582,7 @@ export function Formulario({
           <Boton titulo="Otra captura" variante="secundario" onPress={() => elegirCapturas("galeria")} disabled={guardando} />
           <Boton titulo="Tomar otra foto" variante="secundario" onPress={() => elegirCapturas("camara")} disabled={guardando} />
         </View>
+        <Boton titulo="Sumar archivo o PDF" variante="secundario" onPress={() => void elegirArchivos()} disabled={guardando} />
         <Boton
           titulo={guardando ? "Guardando…" : pago ? "Guardar cambios" : "Confirmar pago"}
           onPress={() => void onGuardar()}
@@ -561,6 +592,19 @@ export function Formulario({
       </ScrollView>
     </KeyboardAvoidingView>
   )
+}
+
+function Vista({ uri, nombre, esPdf }: { uri?: string; nombre: string; esPdf: boolean }) {
+  if (!uri) return null
+  if (esPdf) {
+    return (
+      <View style={estilos.archivo}>
+        <Text style={estilos.documentoTitulo}>{nombre || "Documento PDF"}</Text>
+        <Text style={estilos.ayuda}>Archivo adjunto a este pago.</Text>
+      </View>
+    )
+  }
+  return <Image source={{ uri }} style={estilos.fotoGrande} />
 }
 
 function Campo({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
@@ -651,6 +695,12 @@ const estilos = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     padding: 12,
+  },
+  archivo: {
+    backgroundColor: colores.tarjeta,
+    borderRadius: 14,
+    gap: 4,
+    padding: 14,
   },
   emparejar: {
     backgroundColor: colores.tarjeta,
