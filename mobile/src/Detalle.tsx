@@ -31,7 +31,8 @@ export function Detalle({
   const cuadre = cuadreDe(pago.monto, pago.documentos)
 
   function confirmarBorrado() {
-    Alert.alert("Eliminar este pago", `Se borra el pago de ${pago?.proveedor}, sus documentos y las capturas.`, [
+    const nombre = pago?.proveedor.trim() || "este proveedor"
+    Alert.alert("Eliminar este pago", `Se borra el pago de ${nombre}, sus documentos y las capturas.`, [
       { text: "Cancelar", style: "cancel" },
       {
         text: "Eliminar",
@@ -49,7 +50,7 @@ export function Detalle({
         <Text style={estilos.volver}>Volver a los pagos</Text>
       </Pressable>
       <Text style={estilos.fecha}>{formatFechaLarga(pago.fecha)}</Text>
-      <Text style={estilos.titulo}>{pago.proveedor}</Text>
+      <Text style={estilos.titulo}>{pago.proveedor.trim() || "Sin proveedor"}</Text>
       <Text style={estilos.ayuda}>{[pago.descripcion, pago.tarjeta].filter(Boolean).join(" · ")}</Text>
       {pago.ejemplo ? <Text style={estilos.ejemplo}>Ejemplo</Text> : null}
       <PanelCuadre monto={pago.monto} documentos={pago.documentos} />

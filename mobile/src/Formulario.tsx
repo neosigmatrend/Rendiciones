@@ -1,6 +1,6 @@
 import DateTimePicker from "@react-native-community/datetimepicker"
 import * as ImagePicker from "expo-image-picker"
-import { useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import {
   ActivityIndicator,
   Alert,
@@ -117,6 +117,7 @@ export function Formulario({
   const [corrigiendo, setCorrigiendo] = useState(false)
   const [avisoLectura, setAvisoLectura] = useState<string | null>(null)
   const [lecturaFallida, setLecturaFallida] = useState(false)
+  const camaraAbierta = useRef(false)
 
   function actualizarDocumento(key: string, cambios: Partial<Borrador>) {
     setDocumentos((actuales) => actuales.map((item) => (item.key === key ? { ...item, ...cambios } : item)))
@@ -129,7 +130,7 @@ export function Formulario({
     if (lectura.monto != null) setMonto(formatMontoInput(lectura.monto))
     setDocumentos(lectura.documentos.map((documento, indice) => borradorLeido(documento, indice)))
     const estado = cuadreDe(lectura.monto ?? 0, lectura.documentos).estado
-    setCorrigiendo(!lectura.proveedor || lectura.monto == null || estado === "falta" || estado === "sobra")
+    setCorrigiendo(lectura.monto == null || estado === "falta" || estado === "sobra")
     setLecturaFallida(lectura.monto == null)
     setAvisoLectura(mensajeLectura(lectura))
   }
@@ -200,15 +201,16 @@ export function Formulario({
     }
   }
 
+  useEffect(() => {
+    if (pago || camaraAbierta.current) return
+    camaraAbierta.current = true
+    void elegirCapturas("camara")
+  }, [pago])
+
   async function onGuardar(forzar: boolean) {
     const montoNumero = parseCLP(monto)
     if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
       Alert.alert("Falta la fecha", "Indica la fecha del pago.")
-      return
-    }
-    if (!proveedor.trim()) {
-      setCorrigiendo(true)
-      Alert.alert("Falta el proveedor", "La captura no trajo el proveedor.")
       return
     }
     if (montoNumero == null || montoNumero <= 0) {
@@ -280,9 +282,9 @@ export function Formulario({
     return (
       <ScrollView contentContainerStyle={estilos.contenido}>
         <Text style={estilos.titulo}>Capturar pago</Text>
-        <Text style={estilos.version}>versión 6</Text>
+        <Text style={estilos.version}>versión 7</Text>
         <Text style={estilos.ayuda}>
-          Toma o adjunta la pantalla del pago. La app lee el monto y los folios, comprueba que sumen el cargo y te pide confirmar.
+          Fotografía la boleta o la pantalla del pago. La app lee el monto y los folios, comprueba que sumen el cargo y te pide confirmar.
         </Text>
         <Text style={estilos.ayuda}>Hace falta internet: la captura se envía a OCR.space para leerla.</Text>
         <Boton titulo="Tomar foto" onPress={() => elegirCapturas("camara")} />
@@ -314,7 +316,7 @@ export function Formulario({
         {avisoLectura ? <Text style={[estilos.aviso, lecturaFallida && estilos.avisoError]}>{avisoLectura}</Text> : null}
         {fotoPrincipal ? <Image source={{ uri: fotoPrincipal }} style={estilos.fotoGrande} /> : null}
 
-        <DatoLeido etiqueta="Proveedor" valor={proveedor} vacio="Sin proveedor" editable={corrigiendo || !proveedor.trim()}>
+        <DatoLeido etiqueta="Proveedor" valor={proveedor} vacio="Sin proveedor" editable={corrigiendo}>
           <TextInput
             value={proveedor}
             onChangeText={setProveedor}

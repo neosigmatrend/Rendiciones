@@ -36,7 +36,7 @@ export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onN
   return (
     <ScrollView contentContainerStyle={estilos.contenido}>
       <Text style={estilos.marca}>Rendiciones</Text>
-      <Text style={estilos.version}>versión 6</Text>
+      <Text style={estilos.version}>versión 7</Text>
       <Text style={estilos.subtitulo}>Pagos con tarjeta</Text>
       <View style={estilos.resumen}>
         <Resumen etiqueta="Pagos" valor={String(visibles.length)} />
@@ -66,7 +66,9 @@ export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onN
               <View style={estilos.pagoCabeza}>
                 <View style={estilos.flex}>
                   <Text style={estilos.fecha}>{formatFecha(pago.fecha)}</Text>
-                  <Text style={estilos.proveedor}>{pago.proveedor}</Text>
+                  <Text style={[estilos.proveedor, !pago.proveedor.trim() && estilos.proveedorVacio]}>
+                    {pago.proveedor.trim() || "Sin proveedor"}
+                  </Text>
                   <Text style={estilos.ayuda} numberOfLines={1}>
                     {[pago.descripcion, pago.tarjeta].filter(Boolean).join(" · ")}
                   </Text>
@@ -172,6 +174,7 @@ const estilos = StyleSheet.create({
   flex: { flex: 1 },
   fecha: { color: colores.muted, fontSize: 13 },
   proveedor: { color: colores.tinta, fontSize: 20, fontWeight: "700" },
+  proveedorVacio: { color: colores.muted },
   monto: { color: colores.tinta, fontSize: 18, fontWeight: "700" },
   lineas: { color: colores.tinta, fontSize: 13, lineHeight: 18 },
   meta: { color: colores.muted, fontSize: 12 },
