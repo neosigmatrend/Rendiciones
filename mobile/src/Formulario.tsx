@@ -1,7 +1,8 @@
 import DateTimePicker from "@react-native-community/datetimepicker"
 import * as ImagePicker from "expo-image-picker"
-import { useRef, useState, type ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 import {
+  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
@@ -16,8 +17,11 @@ import {
 import { usePagos } from "./contexto"
 import type { PagoInput } from "./datos"
 import {
+  cuadreDe,
   dateDeIso,
   etiquetaTipo,
+  formatCLP,
+  formatFecha,
   formatMontoInput,
   hoyIso,
   isoDeDate,
@@ -37,7 +41,9 @@ type Borrador = {
   tipo: TipoDocumento
 }
 
-type CapturaNueva = { key: string; uri: string; nombre: string }
+type CapturaNueva = { key: string; uri: string; nombre: string; ancho?: number }
+
+type Paso = "capturar" | "leyendo" | "confirmar"
 
 function esperar(ms: number) {
   return new Promise((resolver) => setTimeout(resolver, ms))
@@ -55,15 +61,25 @@ function borradorLeido(documento: DocumentoLeido, indice: number): Borrador {
 
 function mensajeLecturaFallida(motivos: Array<"sin_datos" | "sin_red" | "servicio">): string {
   if (motivos.length > 0 && motivos.every((motivo) => motivo === "sin_datos")) {
-    return "No encontré el monto ni los folios en la foto. Quedó adjunta; complétalos a mano."
+    return "No encontré el monto ni los folios en la captura."
   }
-  return "No pude leer la foto. Quedó adjunta; complétalos a mano. Revisa que el teléfono tenga internet."
+  return "No pude leer la captura. Revisa que el teléfono tenga internet."
+}
+
+function mensajeLectura(lectura: Lectura): string {
+  const estado = cuadreDe(lectura.monto ?? 0, lectura.documentos).estado
+  if (lectura.monto == null) return "No encontré el monto en la captura."
+  if (estado === "cuadra") {
+    return lectura.documentos.length === 1
+      ? "Leí 1 folio y suma el monto. Confírmalo."
+      : `Leí ${lectura.documentos.length} folios y suman el monto. Confírmalos.`
+  }
+  if (estado === "sin_documentos") return "Leí el monto. Esta captura no trae folios."
+  return "Los montos leídos no cuadran. Corrígelos antes de confirmar."
 }
 
 function borradoresIniciales(pago?: Pago): Borrador[] {
-  if (!pago || pago.documentos.length === 0) {
-    return [{ key: "nuevo-1", folio: "", fecha: "", monto: "", tipo: "factura" }]
-  }
+  if (!pago) return []
   return pago.documentos.map((documento) => ({
     key: documento.id,
     folio: documento.folio,
@@ -85,32 +101,36 @@ export function Formulario({
   onGuardado: (id: string) => void
 }) {
   const { guardar } = usePagos()
-  const fechaInicial = useRef(pago?.fecha ?? hoyIso())
-  const [fecha, setFecha] = useState(fechaInicial.current)
+  const [paso, setPaso] = useState<Paso>(pago ? "confirmar" : "capturar")
+  const [fecha, setFecha] = useState(pago?.fecha ?? hoyIso())
   const [mostrarFecha, setMostrarFecha] = useState(false)
   const [proveedor, setProveedor] = useState(pago?.proveedor ?? "")
   const [descripcion, setDescripcion] = useState(pago?.descripcion ?? "")
   const [monto, setMonto] = useState(pago ? formatMontoInput(pago.monto) : "")
-  const [tarjeta, setTarjeta] = useState(pago?.tarjeta ?? "")
+  const [tarjeta, setTarjeta] = useState(pago?.tarjeta ?? tarjetas[0] ?? "")
   const [documentos, setDocumentos] = useState<Borrador[]>(() => borradoresIniciales(pago))
   const [fechaDocumento, setFechaDocumento] = useState<string | null>(null)
   const [fotosGuardadas, setFotosGuardadas] = useState<Foto[]>(pago?.fotos ?? [])
   const [fotosNuevas, setFotosNuevas] = useState<CapturaNueva[]>([])
   const [guardando, setGuardando] = useState(false)
-  const [leyendo, setLeyendo] = useState(false)
+  const [corrigiendo, setCorrigiendo] = useState(false)
   const [avisoLectura, setAvisoLectura] = useState<string | null>(null)
   const [lecturaFallida, setLecturaFallida] = useState(false)
-  const proveedorRef = useRef(proveedor)
-  const montoRef = useRef(monto)
-  const fechaRef = useRef(fecha)
-  const documentosRef = useRef(documentos)
-  proveedorRef.current = proveedor
-  montoRef.current = monto
-  fechaRef.current = fecha
-  documentosRef.current = documentos
 
   function actualizarDocumento(key: string, cambios: Partial<Borrador>) {
     setDocumentos((actuales) => actuales.map((item) => (item.key === key ? { ...item, ...cambios } : item)))
+  }
+
+  function aplicarLectura(lectura: Lectura) {
+    if (lectura.proveedor) setProveedor(lectura.proveedor)
+    if (lectura.fecha) setFecha(lectura.fecha)
+    if (lectura.descripcion) setDescripcion(lectura.descripcion)
+    if (lectura.monto != null) setMonto(formatMontoInput(lectura.monto))
+    setDocumentos(lectura.documentos.map((documento, indice) => borradorLeido(documento, indice)))
+    const estado = cuadreDe(lectura.monto ?? 0, lectura.documentos).estado
+    setCorrigiendo(!lectura.proveedor || lectura.monto == null || estado === "falta" || estado === "sobra")
+    setLecturaFallida(lectura.monto == null)
+    setAvisoLectura(mensajeLectura(lectura))
   }
 
   async function elegirCapturas(origen: "galeria" | "camara") {
@@ -122,8 +142,8 @@ export function Formulario({
       Alert.alert(
         "Sin acceso",
         origen === "camara"
-          ? "Permite la cámara para fotografiar el comprobante."
-          : "Permite el acceso a las fotos para adjuntar la captura de la pantalla.",
+          ? "Permite la cámara para fotografiar la pantalla del pago."
+          : "Permite el acceso a las fotos para adjuntar la captura.",
       )
       return
     }
@@ -149,9 +169,9 @@ export function Formulario({
       ancho: asset.width,
     }))
     setFotosNuevas((actuales) => [...actuales, ...siguientes].slice(0, 8))
-    setLeyendo(true)
+    setPaso("leyendo")
     setLecturaFallida(false)
-    setAvisoLectura("Leyendo monto y folios…")
+    setAvisoLectura(null)
     const lecturas: Lectura[] = []
     const motivos: Array<"sin_datos" | "sin_red" | "servicio"> = []
     try {
@@ -164,79 +184,41 @@ export function Formulario({
         else motivos.push(resultadoFoto.motivo)
       }
       if (lecturas.length === 0) {
-        const mensaje = mensajeLecturaFallida(motivos)
         setLecturaFallida(true)
-        setAvisoLectura(mensaje)
-        Alert.alert("No leí la captura", mensaje)
-        return
+        setCorrigiendo(true)
+        setAvisoLectura(mensajeLecturaFallida(motivos))
+      } else {
+        aplicarLectura(combinarLecturas(lecturas))
       }
-      const aviso = aplicarLectura(combinarLecturas(lecturas))
-      setLecturaFallida(false)
-      setAvisoLectura(aviso)
-      Alert.alert("Datos de la captura", aviso)
     } catch {
       setLecturaFallida(true)
-      setAvisoLectura("No pude leer la foto. Quedó adjunta; completa el monto y los folios a mano.")
+      setCorrigiendo(true)
+      setAvisoLectura("No pude leer la captura. Revisa que el teléfono tenga internet.")
     } finally {
-      setLeyendo(false)
+      setPaso("confirmar")
     }
   }
 
-  function aplicarLectura(lectura: Lectura): string {
-    if (lectura.proveedor && !proveedorRef.current.trim()) setProveedor(lectura.proveedor)
-    if (lectura.fecha && fechaRef.current === fechaInicial.current) setFecha(lectura.fecha)
-    const montoVacio = !montoRef.current.trim()
-    if (lectura.monto != null && montoVacio) setMonto(formatMontoInput(lectura.monto))
-
-    const actuales = documentosRef.current
-    const vacios = actuales.every((documento) => !documento.folio.trim() && !documento.fecha && !(parseCLP(documento.monto) ?? 0))
-    const existentes = new Set(actuales.map((documento) => documento.folio.trim()).filter(Boolean))
-    const nuevos = lectura.documentos.filter((documento) => !existentes.has(documento.folio))
-    if (nuevos.length > 0) {
-      const filas = nuevos.map((documento, indice) => borradorLeido(documento, indice))
-      setDocumentos(vacios ? filas : [...actuales, ...filas])
-    }
-
-    if (montoVacio && lectura.monto != null && nuevos.length > 0) {
-      return nuevos.length === 1
-        ? "Leí el monto y 1 folio. Revísalos antes de guardar."
-        : `Leí el monto y ${nuevos.length} folios. Revísalos antes de guardar.`
-    }
-    if (montoVacio && lectura.monto != null && lectura.documentos.length > 0) {
-      return "Leí el monto. Los folios ya estaban en el pago."
-    }
-    if (montoVacio && lectura.monto != null) {
-      return "Leí el monto. En la captura no aparecen folios; puedes completarlos después."
-    }
-    if (nuevos.length > 0) {
-      return nuevos.length === 1 ? "Leí 1 folio. Revisa el monto del cargo." : `Leí ${nuevos.length} folios. Revisa el monto del cargo.`
-    }
-    return "La foto quedó adjunta. El monto y los folios ya estaban escritos."
-  }
-
-  async function onGuardar() {
+  async function onGuardar(forzar: boolean) {
     const montoNumero = parseCLP(monto)
     if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
       Alert.alert("Falta la fecha", "Indica la fecha del pago.")
       return
     }
     if (!proveedor.trim()) {
-      Alert.alert("Falta el proveedor", "Indica quién recibió el pago.")
+      setCorrigiendo(true)
+      Alert.alert("Falta el proveedor", "La captura no trajo el proveedor.")
       return
     }
     if (montoNumero == null || montoNumero <= 0) {
-      Alert.alert("Falta el monto", "Indica el monto del cargo en la tarjeta.")
+      setCorrigiendo(true)
+      Alert.alert("Falta el monto", "La captura no trajo el monto del cargo.")
       return
     }
     if (!tarjeta.trim()) {
-      Alert.alert("Falta la tarjeta", "Indica con qué tarjeta pagaste.")
+      Alert.alert("Falta la tarjeta", "Elige con qué tarjeta pagaste.")
       return
     }
-    if (fotosGuardadas.length + fotosNuevas.length > 8) {
-      Alert.alert("Demasiadas capturas", "Puedes adjuntar hasta 8 capturas por pago.")
-      return
-    }
-
     const documentosLimpios: PagoInput["documentos"] = []
     for (const documento of documentos) {
       const folio = documento.folio.trim()
@@ -252,6 +234,16 @@ export function Formulario({
         monto: montoDocumento,
         tipo: documento.tipo,
       })
+    }
+    const estado = cuadreDe(montoNumero, documentosLimpios).estado
+    if (!forzar && estado !== "cuadra" && estado !== "sin_documentos") {
+      setCorrigiendo(true)
+      Alert.alert("No cuadra", "Los folios no suman el monto del cargo.")
+      return
+    }
+    if (fotosGuardadas.length + fotosNuevas.length > 8) {
+      Alert.alert("Demasiadas capturas", "Puedes adjuntar hasta 8 capturas por pago.")
+      return
     }
 
     setGuardando(true)
@@ -279,16 +271,58 @@ export function Formulario({
     folio: documento.folio,
     monto: parseCLP(documento.monto) ?? 0,
   }))
+  const cuadre = cuadreDe(parseCLP(monto) ?? 0, documentosParaCuadre)
+  const puedeConfirmar = cuadre.estado === "cuadra" || cuadre.estado === "sin_documentos"
+  const fotoPrincipal = fotosNuevas[fotosNuevas.length - 1]?.uri ?? fotosGuardadas[0]?.uri
+
+  if (paso === "capturar") {
+    return (
+      <ScrollView contentContainerStyle={estilos.contenido}>
+        <Text style={estilos.titulo}>Capturar pago</Text>
+        <Text style={estilos.ayuda}>
+          Toma o adjunta la pantalla del pago. La app lee el monto y los folios, comprueba que sumen el cargo y te pide confirmar.
+        </Text>
+        <Text style={estilos.ayuda}>Hace falta internet: la captura se envía a OCR.space para leerla.</Text>
+        <Boton titulo="Tomar foto" onPress={() => elegirCapturas("camara")} />
+        <Boton titulo="Adjuntar captura" variante="secundario" onPress={() => elegirCapturas("galeria")} />
+        <Boton titulo="Cancelar" variante="secundario" onPress={onCancelar} />
+      </ScrollView>
+    )
+  }
+
+  if (paso === "leyendo") {
+    return (
+      <View style={estilos.leyendo}>
+        {fotoPrincipal ? <Image source={{ uri: fotoPrincipal }} style={estilos.fotoGrande} /> : null}
+        <ActivityIndicator color={colores.primario} />
+        <Text style={estilos.tituloChico}>Leyendo monto y folios…</Text>
+      </View>
+    )
+  }
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={estilos.flex}>
       <ScrollView contentContainerStyle={estilos.contenido} keyboardShouldPersistTaps="handled">
-        <Text style={estilos.titulo}>{pago ? `Editar ${pago.proveedor}` : "Registrar pago"}</Text>
+        <Text style={estilos.titulo}>{pago ? "Revisar pago" : "Confirmar pago"}</Text>
         <Text style={estilos.ayuda}>
-          Adjunta la captura del pago. La app lee el monto y los folios. Varias facturas pueden sumar ese cargo, como en Agrosuper o Gasco.
+          {puedeConfirmar
+            ? "Esto es lo que leí en la captura. Si está bien, confirma."
+            : "Los folios no suman el monto. Corrige lo que esté mal y después confirma."}
         </Text>
+        {avisoLectura ? <Text style={[estilos.aviso, lecturaFallida && estilos.avisoError]}>{avisoLectura}</Text> : null}
+        {fotoPrincipal ? <Image source={{ uri: fotoPrincipal }} style={estilos.fotoGrande} /> : null}
 
-        <Campo etiqueta="Fecha del pago">
+        <DatoLeido etiqueta="Proveedor" valor={proveedor} vacio="Sin proveedor" editable={corrigiendo || !proveedor.trim()}>
+          <TextInput
+            value={proveedor}
+            onChangeText={setProveedor}
+            placeholder="Agrosuper, Gasco…"
+            placeholderTextColor="#8B938C"
+            style={estilos.input}
+          />
+        </DatoLeido>
+
+        <DatoLeido etiqueta="Fecha" valor={formatFecha(fecha)} editable={corrigiendo}>
           <Pressable onPress={() => setMostrarFecha(true)} style={estilos.selector}>
             <Text style={estilos.selectorTexto}>{fecha.split("-").reverse().join("-")}</Text>
           </Pressable>
@@ -302,22 +336,14 @@ export function Formulario({
               }}
             />
           ) : null}
-          {Platform.OS === "ios" && mostrarFecha ? (
-            <Boton titulo="Listo" variante="secundario" onPress={() => setMostrarFecha(false)} />
-          ) : null}
-        </Campo>
+        </DatoLeido>
 
-        <Campo etiqueta="Proveedor">
-          <TextInput
-            value={proveedor}
-            onChangeText={setProveedor}
-            placeholder="Agrosuper, Gasco…"
-            placeholderTextColor="#8B938C"
-            style={estilos.input}
-          />
-        </Campo>
-
-        <Campo etiqueta="Monto del cargo">
+        <DatoLeido
+          etiqueta="Monto del cargo"
+          valor={parseCLP(monto) != null ? formatCLP(parseCLP(monto) ?? 0) : ""}
+          vacio="Sin monto"
+          editable={corrigiendo || !(parseCLP(monto) ?? 0)}
+        >
           <TextInput
             value={monto}
             onChangeText={setMonto}
@@ -326,163 +352,156 @@ export function Formulario({
               if (valor != null) setMonto(formatMontoInput(valor))
             }}
             keyboardType="number-pad"
-            placeholder="166547"
+            placeholder="Monto"
             placeholderTextColor="#8B938C"
             style={estilos.input}
           />
-        </Campo>
+        </DatoLeido>
+
+        {descripcion || corrigiendo ? (
+          <DatoLeido etiqueta="Descripción" valor={descripcion} vacio="Sin descripción" editable={corrigiendo}>
+            <TextInput
+              value={descripcion}
+              onChangeText={setDescripcion}
+              placeholder="Pago en línea, recarga…"
+              placeholderTextColor="#8B938C"
+              style={estilos.input}
+            />
+          </DatoLeido>
+        ) : null}
+
+        <Text style={estilos.seccion}>Folios</Text>
+        {documentos.length === 0 ? <Text style={estilos.ayuda}>Esta captura no trae folios.</Text> : null}
+        {documentos.map((documento, indice) =>
+          corrigiendo ? (
+            <View key={documento.key} style={estilos.documento}>
+              <View style={estilos.documentoCabeza}>
+                <Text style={estilos.documentoTitulo}>Documento {indice + 1}</Text>
+                <Pressable onPress={() => setDocumentos((actuales) => actuales.filter((item) => item.key !== documento.key))}>
+                  <Text style={estilos.quitar}>Quitar</Text>
+                </Pressable>
+              </View>
+              <View style={estilos.chips}>
+                {TIPOS_DOCUMENTO.map((tipo) => (
+                  <Pressable
+                    key={tipo}
+                    onPress={() => actualizarDocumento(documento.key, { tipo })}
+                    style={[estilos.chip, documento.tipo === tipo && estilos.chipActivo]}
+                  >
+                    <Text style={[estilos.chipTexto, documento.tipo === tipo && estilos.chipTextoActivo]}>
+                      {etiquetaTipo(tipo)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <TextInput
+                value={documento.folio}
+                onChangeText={(folio) => actualizarDocumento(documento.key, { folio })}
+                placeholder="Folio"
+                placeholderTextColor="#8B938C"
+                style={estilos.input}
+              />
+              <Pressable onPress={() => setFechaDocumento(documento.key)} style={estilos.selector}>
+                <Text style={documento.fecha ? estilos.selectorTexto : estilos.placeholder}>
+                  {documento.fecha ? documento.fecha.split("-").reverse().join("-") : "Fecha del documento"}
+                </Text>
+              </Pressable>
+              {fechaDocumento === documento.key ? (
+                <DateTimePicker
+                  value={documento.fecha ? dateDeIso(documento.fecha) : new Date()}
+                  mode="date"
+                  onChange={(evento, valor) => {
+                    if (Platform.OS === "android" || evento.type === "dismissed") setFechaDocumento(null)
+                    if (valor && evento.type !== "dismissed") actualizarDocumento(documento.key, { fecha: isoDeDate(valor) })
+                  }}
+                />
+              ) : null}
+              <TextInput
+                value={documento.monto}
+                onChangeText={(valor) => actualizarDocumento(documento.key, { monto: valor })}
+                onBlur={() => {
+                  const valor = parseCLP(documento.monto)
+                  if (valor != null) actualizarDocumento(documento.key, { monto: formatMontoInput(valor) })
+                }}
+                keyboardType="number-pad"
+                placeholder="Monto"
+                placeholderTextColor="#8B938C"
+                style={estilos.input}
+              />
+            </View>
+          ) : (
+            <View key={documento.key} style={estilos.documento}>
+              <Text style={estilos.documentoTitulo}>
+                {etiquetaTipo(documento.tipo)} {documento.folio || "sin folio"}
+              </Text>
+              <Text style={estilos.ayuda}>
+                {(documento.fecha ? formatFecha(documento.fecha) : "Sin fecha") +
+                  " · " +
+                  formatCLP(parseCLP(documento.monto) ?? 0)}
+              </Text>
+            </View>
+          ),
+        )}
+        {corrigiendo ? (
+          <Boton
+            titulo="Agregar folio"
+            variante="secundario"
+            onPress={() =>
+              setDocumentos((actuales) => [
+                ...actuales,
+                { key: `${Date.now()}`, folio: "", fecha: "", monto: "", tipo: "factura" },
+              ])
+            }
+          />
+        ) : null}
+
+        <PanelCuadre monto={parseCLP(monto) ?? 0} documentos={documentosParaCuadre} />
 
         <Campo etiqueta="Tarjeta">
-          <TextInput
-            value={tarjeta}
-            onChangeText={setTarjeta}
-            placeholder="Visa empresa"
-            placeholderTextColor="#8B938C"
-            style={estilos.input}
-          />
           {tarjetas.length > 0 ? (
             <View style={estilos.chips}>
               {tarjetas.map((nombre) => (
-                <Pressable key={nombre} onPress={() => setTarjeta(nombre)} style={estilos.chip}>
-                  <Text style={estilos.chipTexto}>{nombre}</Text>
+                <Pressable
+                  key={nombre}
+                  onPress={() => setTarjeta(nombre)}
+                  style={[estilos.chip, tarjeta === nombre && estilos.chipActivo]}
+                >
+                  <Text style={[estilos.chipTexto, tarjeta === nombre && estilos.chipTextoActivo]}>{nombre}</Text>
                 </Pressable>
               ))}
             </View>
           ) : null}
-        </Campo>
-
-        <Campo etiqueta="Descripción">
-          <TextInput
-            value={descripcion}
-            onChangeText={setDescripcion}
-            placeholder="Pago en línea, recarga granel…"
-            placeholderTextColor="#8B938C"
-            style={estilos.input}
-          />
-        </Campo>
-
-        <Text style={estilos.seccion}>Captura de la pantalla</Text>
-        <Text style={estilos.ayuda}>
-          Al adjuntar la captura se completan el monto y los folios. La foto se envía a OCR.space; hace falta internet.
-        </Text>
-        <View style={estilos.acciones}>
-          <Boton
-            titulo="Adjuntar captura"
-            variante="secundario"
-            disabled={leyendo || guardando}
-            onPress={() => elegirCapturas("galeria")}
-          />
-          <Boton
-            titulo="Tomar foto"
-            variante="secundario"
-            disabled={leyendo || guardando}
-            onPress={() => elegirCapturas("camara")}
-          />
-        </View>
-        {avisoLectura ? (
-          <Text style={[estilos.aviso, lecturaFallida && estilos.avisoError]}>{avisoLectura}</Text>
-        ) : null}
-        <View style={estilos.fotos}>
-          {fotosGuardadas.map((foto) => (
-            <VistaFoto
-              key={foto.id}
-              uri={foto.uri}
-              onQuitar={() => setFotosGuardadas((actuales) => actuales.filter((item) => item.id !== foto.id))}
-            />
-          ))}
-          {fotosNuevas.map((foto) => (
-            <VistaFoto
-              key={foto.key}
-              uri={foto.uri}
-              onQuitar={() => setFotosNuevas((actuales) => actuales.filter((item) => item.key !== foto.key))}
-            />
-          ))}
-        </View>
-
-        <Text style={estilos.seccion}>Documentos del pago</Text>
-        <Text style={estilos.ayuda}>
-          Cada factura o boleta va en su línea. Si el folio todavía no está, guarda el pago y complétalo después.
-        </Text>
-        {documentos.map((documento, indice) => (
-          <View key={documento.key} style={estilos.documento}>
-            <View style={estilos.documentoCabeza}>
-              <Text style={estilos.documentoTitulo}>Documento {indice + 1}</Text>
-              {documentos.length > 1 ? (
-                <Pressable onPress={() => setDocumentos((actuales) => actuales.filter((item) => item.key !== documento.key))}>
-                  <Text style={estilos.quitar}>Quitar</Text>
-                </Pressable>
-              ) : null}
-            </View>
-            <View style={estilos.chips}>
-              {TIPOS_DOCUMENTO.map((tipo) => (
-                <Pressable
-                  key={tipo}
-                  onPress={() => actualizarDocumento(documento.key, { tipo })}
-                  style={[estilos.chip, documento.tipo === tipo && estilos.chipActivo]}
-                >
-                  <Text style={[estilos.chipTexto, documento.tipo === tipo && estilos.chipTextoActivo]}>
-                    {etiquetaTipo(tipo)}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
+          {corrigiendo || !tarjeta.trim() || !tarjetas.includes(tarjeta) ? (
             <TextInput
-              value={documento.folio}
-              onChangeText={(folio) => actualizarDocumento(documento.key, { folio })}
-              placeholder="Folio 101070510"
+              value={tarjeta}
+              onChangeText={setTarjeta}
+              placeholder="Visa empresa"
               placeholderTextColor="#8B938C"
               style={estilos.input}
             />
-            <Pressable onPress={() => setFechaDocumento(documento.key)} style={estilos.selector}>
-              <Text style={documento.fecha ? estilos.selectorTexto : estilos.placeholder}>
-                {documento.fecha ? documento.fecha.split("-").reverse().join("-") : "Fecha del documento"}
-              </Text>
-            </Pressable>
-            {fechaDocumento === documento.key ? (
-              <DateTimePicker
-                value={documento.fecha ? dateDeIso(documento.fecha) : new Date()}
-                mode="date"
-                onChange={(evento, valor) => {
-                  if (Platform.OS === "android" || evento.type === "dismissed") setFechaDocumento(null)
-                  if (valor && evento.type !== "dismissed") actualizarDocumento(documento.key, { fecha: isoDeDate(valor) })
-                }}
-              />
-            ) : null}
-            <TextInput
-              value={documento.monto}
-              onChangeText={(valor) => actualizarDocumento(documento.key, { monto: valor })}
-              onBlur={() => {
-                const valor = parseCLP(documento.monto)
-                if (valor != null) actualizarDocumento(documento.key, { monto: formatMontoInput(valor) })
-              }}
-              keyboardType="number-pad"
-              placeholder="Monto"
-              placeholderTextColor="#8B938C"
-              style={estilos.input}
-            />
-          </View>
-        ))}
+          ) : null}
+        </Campo>
+
         <Boton
-          titulo="Agregar documento"
+          titulo={corrigiendo ? "Ver lectura" : "Corregir"}
           variante="secundario"
-          onPress={() =>
-            setDocumentos((actuales) => [
-              ...actuales,
-              { key: `${Date.now()}`, folio: "", fecha: "", monto: "", tipo: "factura" },
-            ])
-          }
+          onPress={() => setCorrigiendo((actual) => !actual)}
         />
-
-        <PanelCuadre monto={parseCLP(monto) ?? 0} documentos={documentosParaCuadre} />
-
         <View style={estilos.acciones}>
-          <Boton titulo="Cancelar" variante="secundario" onPress={onCancelar} />
-          <Boton
-            titulo={leyendo ? "Leyendo foto…" : guardando ? "Guardando…" : "Guardar pago"}
-            onPress={onGuardar}
-            disabled={guardando || leyendo}
-          />
+          <Boton titulo="Otra captura" variante="secundario" onPress={() => elegirCapturas("galeria")} disabled={guardando} />
+          <Boton titulo="Tomar otra foto" variante="secundario" onPress={() => elegirCapturas("camara")} disabled={guardando} />
         </View>
+        <Boton
+          titulo={guardando ? "Guardando…" : pago ? "Guardar cambios" : "Confirmar pago"}
+          onPress={() => onGuardar(false)}
+          disabled={guardando || !puedeConfirmar}
+        />
+        {!puedeConfirmar ? (
+          <Pressable onPress={() => onGuardar(true)} disabled={guardando}>
+            <Text style={estilos.quitar}>Confirmar aunque no cuadre</Text>
+          </Pressable>
+        ) : null}
+        <Boton titulo="Cancelar" variante="secundario" onPress={onCancelar} />
       </ScrollView>
     </KeyboardAvoidingView>
   )
@@ -497,13 +516,24 @@ function Campo({ etiqueta, children }: { etiqueta: string; children: ReactNode }
   )
 }
 
-function VistaFoto({ uri, onQuitar }: { uri: string; onQuitar: () => void }) {
+function DatoLeido({
+  etiqueta,
+  valor,
+  vacio = "",
+  editable,
+  children,
+}: {
+  etiqueta: string
+  valor: string
+  vacio?: string
+  editable: boolean
+  children: ReactNode
+}) {
+  if (editable) return <Campo etiqueta={etiqueta}>{children}</Campo>
   return (
-    <View style={estilos.foto}>
-      <Image source={{ uri }} style={estilos.imagen} />
-      <Pressable onPress={onQuitar} style={estilos.fotoQuitar}>
-        <Text style={estilos.fotoQuitarTexto}>Quitar</Text>
-      </Pressable>
+    <View style={estilos.dato}>
+      <Text style={estilos.etiqueta}>{etiqueta}</Text>
+      <Text style={estilos.datoValor}>{valor.trim() || vacio}</Text>
     </View>
   )
 }
@@ -511,12 +541,16 @@ function VistaFoto({ uri, onQuitar }: { uri: string; onQuitar: () => void }) {
 const estilos = StyleSheet.create({
   flex: { flex: 1 },
   contenido: { gap: 12, padding: 16, paddingBottom: 40 },
+  leyendo: { alignItems: "center", flex: 1, gap: 16, justifyContent: "center", padding: 24 },
   titulo: { color: colores.tinta, fontSize: 28, fontWeight: "700" },
+  tituloChico: { color: colores.tinta, fontSize: 18, fontWeight: "700" },
   seccion: { color: colores.tinta, fontSize: 20, fontWeight: "700", marginTop: 8 },
   ayuda: { color: colores.muted, fontSize: 15, lineHeight: 21 },
   aviso: { color: colores.tinta, fontSize: 15, lineHeight: 21 },
   avisoError: { color: colores.faltaTexto },
   campo: { gap: 6 },
+  dato: { gap: 2 },
+  datoValor: { color: colores.tinta, fontSize: 20, fontWeight: "700" },
   etiqueta: { color: colores.tinta, fontSize: 14, fontWeight: "700" },
   input: {
     backgroundColor: colores.tarjeta,
@@ -552,11 +586,7 @@ const estilos = StyleSheet.create({
   chipTexto: { color: colores.tinta, fontSize: 14, fontWeight: "600" },
   chipTextoActivo: { color: colores.primarioTexto },
   acciones: { gap: 8 },
-  fotos: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  foto: { width: 104 },
-  imagen: { backgroundColor: "#DDD6C8", borderRadius: 12, height: 78, width: 104 },
-  fotoQuitar: { alignItems: "center", paddingVertical: 4 },
-  fotoQuitarTexto: { color: colores.muted, fontSize: 13, textDecorationLine: "underline" },
+  fotoGrande: { backgroundColor: "#DDD6C8", borderRadius: 16, height: 220, width: "100%" },
   documento: {
     backgroundColor: colores.tarjeta,
     borderColor: colores.borde,
@@ -566,6 +596,6 @@ const estilos = StyleSheet.create({
     padding: 12,
   },
   documentoCabeza: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
-  documentoTitulo: { color: colores.tinta, fontSize: 15, fontWeight: "700" },
-  quitar: { color: colores.muted, fontSize: 14, textDecorationLine: "underline" },
+  documentoTitulo: { color: colores.tinta, fontSize: 16, fontWeight: "700" },
+  quitar: { color: colores.muted, fontSize: 14, textAlign: "center", textDecorationLine: "underline" },
 })

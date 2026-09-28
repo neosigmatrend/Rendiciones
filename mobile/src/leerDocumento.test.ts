@@ -60,6 +60,7 @@ PAGADO
 `
 
 assert.equal(leerTexto(agrosuper).proveedor, "Agrosuper")
+assert.equal(leerTexto(agrosuper).descripcion, "Pago en línea")
 assert.equal(leerTexto(agrosuper).fecha, "2026-09-21")
 assert.equal(leerTexto(agrosuper).monto, 166547)
 assert.deepEqual(folios(agrosuper), ["101070510", "101070582"])
@@ -68,6 +69,7 @@ assert.equal(leerTexto(agrosuper).documentos[0]?.fecha, "2026-08-22")
 assert.equal(leerTexto(agrosuper).documentos[1]?.fecha, "2026-08-26")
 
 assert.equal(leerTexto(gasco).proveedor, "Gasco")
+assert.equal(leerTexto(gasco).descripcion, "Recarga")
 assert.equal(leerTexto(gasco).monto, 580179)
 assert.deepEqual(folios(gasco), ["12214585", "12215855"])
 assert.deepEqual(montos(gasco), [405057, 175122])
@@ -75,6 +77,7 @@ assert.equal(folios(gasco).includes("12442757"), false)
 assert.equal(folios(gasco).includes("12210001"), false)
 
 assert.equal(leerTexto(aguas).proveedor, "Aguas Andinas")
+assert.equal(leerTexto(aguas).descripcion, "Webpay")
 assert.equal(leerTexto(aguas).monto, 211060)
 assert.deepEqual(leerTexto(aguas).documentos, [])
 assert.equal(leerTexto(aguas).fecha, "2026-08-17")

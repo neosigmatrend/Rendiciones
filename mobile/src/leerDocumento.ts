@@ -12,6 +12,7 @@ export type Lectura = {
   documentos: DocumentoLeido[]
   proveedor: string | null
   fecha: string | null
+  descripcion: string | null
 }
 
 const MESES: Record<string, number> = {
@@ -287,7 +288,15 @@ export function leerTexto(entrada: string): Lectura {
     documentos,
     proveedor: proveedorDe(texto),
     fecha: fechaPago,
+    descripcion: descripcionDe(texto),
   }
+}
+
+function descripcionDe(texto: string): string | null {
+  if (/pagar en l[ií]nea/i.test(texto)) return "Pago en línea"
+  if (/recarga/i.test(texto)) return "Recarga"
+  if (/webpay/i.test(texto)) return "Webpay"
+  return null
 }
 
 function fechaDePago(texto: string, tokens: Token[]): string | null {
@@ -305,15 +314,17 @@ export function combinarLecturas(lecturas: Lectura[]): Lectura {
   let monto: number | null = null
   let proveedor: string | null = null
   let fecha: string | null = null
+  let descripcion: string | null = null
   for (const lectura of lecturas) {
     if (monto == null && lectura.monto != null) monto = lectura.monto
     if (!proveedor && lectura.proveedor) proveedor = lectura.proveedor
     if (!fecha && lectura.fecha) fecha = lectura.fecha
+    if (!descripcion && lectura.descripcion) descripcion = lectura.descripcion
     for (const documento of lectura.documentos) {
       if (folios.has(documento.folio)) continue
       folios.add(documento.folio)
       documentos.push(documento)
     }
   }
-  return { monto, documentos, proveedor, fecha }
+  return { monto, documentos, proveedor, fecha, descripcion }
 }

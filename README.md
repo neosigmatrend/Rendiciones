@@ -1,6 +1,6 @@
 # Rendiciones
 
-App para el teléfono. Al pagar con tarjeta registras el cargo, adjuntas la captura de la pantalla y anotas las facturas o boletas que suman ese monto.
+App para el teléfono. Al pagar, tomas o adjuntas la captura de la pantalla. La app lee el monto y los folios, comprueba que sumen el cargo y pide confirmación.
 
 ## Abrirla en Expo Go
 
@@ -17,7 +17,7 @@ npx expo start
 
 Los pagos quedan guardados en el teléfono. Agrosuper, Gasco y Aguas Andinas aparecen como ejemplos la primera vez.
 
-Al adjuntar la captura, la app la envía a OCR.space para leer el monto y los folios. El teléfono necesita internet. Si no logra leerlos, la foto queda guardada y se completan a mano.
+La captura se envía a OCR.space para leerla. El teléfono necesita internet. Si la lectura no cuadra, se corrige antes de confirmar. Si no logra leerla, la foto queda y esos datos se completan en la confirmación.
 
 ## Web
 

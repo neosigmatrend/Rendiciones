@@ -42,7 +42,7 @@ export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onN
         <Resumen etiqueta="En tarjeta" valor={formatCLP(total)} />
         <Resumen etiqueta="Cuadrados" valor={`${cuadrados}/${visibles.length}`} />
       </View>
-      <Boton titulo="Registrar pago" onPress={onNuevo} />
+      <Boton titulo="Capturar pago" onPress={onNuevo} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={estilos.meses}>
         <Filtro titulo="Todos" activo={mes === null} onPress={() => setMes(null)} />
         {meses.map((item) => (
@@ -54,7 +54,7 @@ export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onN
         <View style={estilos.vacio}>
           <Text style={estilos.titulo}>Todavía no hay pagos</Text>
           <Text style={estilos.ayuda}>
-            Cuando pagues con tarjeta, registra el cargo, adjunta la captura y agrega las facturas o boletas que suman ese monto.
+            Toma o adjunta la pantalla del pago. La app lee el monto y los folios, y los dejas confirmados si cuadran.
           </Text>
         </View>
       ) : (
