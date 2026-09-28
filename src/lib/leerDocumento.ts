@@ -61,7 +61,7 @@ const FECHA_NUMERO_RE = /\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})\b/g
 
 type Intervalo = { index: number; fin: number }
 
-type RolMonto = "total" | "cargo" | "vuelto" | null
+type RolMonto = "total" | "cargo" | "vuelto" | "impuesto" | "subtotal" | null
 
 type Token =
   | { tipo: "folio"; valor: string; tipoDocumento: TipoDocumento; index: number; fin: number }
@@ -165,30 +165,32 @@ function sinAcento(texto: string) {
 }
 
 function rolCercano(fragmento: string): RolMonto {
-  const texto = ` ${sinAcento(fragmento)} `
-  const marcas: [Exclude<RolMonto, null>, string][] = [
-    ["vuelto", "vuelto"],
-    ["vuelto", "cambio"],
-    ["vuelto", "propina"],
-    ["total", "total"],
-    ["total", "a pagar"],
-    ["cargo", "credito"],
-    ["cargo", "debito"],
-    ["cargo", "efectivo"],
-    ["cargo", "abono"],
+  const texto = sinAcento(fragmento)
+  const marcas: [Exclude<RolMonto, null>, RegExp][] = [
+    ["impuesto", /total\s*iva/g],
+    ["impuesto", /(?<![a-z])iva(?![a-z])/g],
+    ["impuesto", /(?<![a-z])neto(?![a-z])/g],
+    ["subtotal", /sub\s*total/g],
+    ["vuelto", /(?<![a-z])(?:vuelto|cambio|propina)(?![a-z])/g],
+    ["total", /(?<![a-z])total(?![a-z])/g],
+    ["total", /a\s+pagar/g],
+    ["cargo", /(?<![a-z])(?:credito|debito|efectivo|abono)(?![a-z])/g],
   ]
-  let ultimo: { rol: Exclude<RolMonto, null>; index: number } | null = null
-  for (const [rol, palabra] of marcas) {
-    let desde = 0
-    while (desde < texto.length) {
-      const index = texto.indexOf(palabra, desde)
-      if (index < 0) break
-      if (palabra === "total" && texto.slice(index - 3, index) === "sub") {
-        desde = index + palabra.length
-        continue
+  const prioridad: Record<Exclude<RolMonto, null>, number> = {
+    impuesto: 5,
+    subtotal: 4,
+    vuelto: 3,
+    cargo: 2,
+    total: 1,
+  }
+  let ultimo: { rol: Exclude<RolMonto, null>; fin: number } | null = null
+  for (const [rol, expresion] of marcas) {
+    for (const match of texto.matchAll(expresion)) {
+      if (match.index == null) continue
+      const fin = match.index + match[0].length
+      if (!ultimo || fin > ultimo.fin || (fin === ultimo.fin && prioridad[rol] > prioridad[ultimo.rol])) {
+        ultimo = { rol, fin }
       }
-      if (!ultimo || index >= ultimo.index) ultimo = { rol, index }
-      desde = index + palabra.length
     }
   }
   return ultimo?.rol ?? null
@@ -372,7 +374,10 @@ export function leerTexto(entrada: string): Lectura {
   }
 
   const montos = tokens.filter((token) => token.tipo === "monto")
-  if (montos.some((monto) => monto.rol !== "vuelto")) {
+  for (const monto of montos) {
+    if (monto.rol === "impuesto") monto.ignorar = true
+  }
+  if (montos.some((monto) => monto.rol !== "vuelto" && monto.rol !== "impuesto")) {
     for (const monto of montos) {
       if (monto.rol === "vuelto") monto.ignorar = true
     }
@@ -386,6 +391,7 @@ export function leerTexto(entrada: string): Lectura {
 
   const pares: DocumentoLeido[] = []
   const totales: number[] = []
+  const subtotales: number[] = []
   const fechasSueltas: string[] = []
   let actual: DocumentoLeido | null = null
 
@@ -412,12 +418,17 @@ export function leerTexto(entrada: string): Lectura {
       totales.push(token.valor)
       continue
     }
+    if (token.tipo === "monto" && token.rol === "subtotal") {
+      subtotales.push(token.valor)
+      continue
+    }
     if (token.tipo === "monto" && actual && actual.monto === 0) actual.monto = token.valor
   }
   cerrarActual()
 
   const total = totales.length > 0 ? totales[totales.length - 1] : null
-  const documentos = elegirDocumentos(pares, total, cantidadUtil)
+  const subtotal = subtotales.length > 0 ? subtotales[subtotales.length - 1] : null
+  const documentos = elegirDocumentos(pares, total ?? subtotal, cantidadUtil)
   const fechaPago = fechaDePago(texto, tokens) ?? fechasSueltas[0] ?? null
   const palabras = montoEnPalabras(texto)
   const utiles = montos.filter((monto) => !monto.ignorar)
@@ -427,7 +438,7 @@ export function leerTexto(entrada: string): Lectura {
   const suma = documentos.reduce((acumulado, documento) => acumulado + documento.monto, 0)
 
   return {
-    monto: total ?? cargo ?? igualPalabras ?? (documentos.length > 0 ? suma : null) ?? unico ?? palabras,
+    monto: cargo ?? total ?? subtotal ?? igualPalabras ?? (documentos.length > 0 ? suma : null) ?? unico ?? palabras,
     documentos,
     proveedor: proveedorDe(texto),
     fecha: fechaPago,

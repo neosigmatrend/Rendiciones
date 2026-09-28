@@ -186,4 +186,22 @@ SON: DIEZ MIL PESOS
 `
 assert.equal(leerTexto(enPalabras).monto, 10000)
 
+const supermercado = `
+JOSE PEDRO ALESSANDRI 1132
+NUNOA - SANTIAGO
+7802821007168 JUGO 1LT POMELO 5.490
+6 X $1.740
+7804610850788 LECHUGA HIDROP. L 10.440
+4 X $1.740
+7804610850795 LECHUGA HIDROP. LO 6.960
+SUB TOTAL $ 22.890
+TOTAL $ 22.890
+NETO $ 19.236
+TOTAL IVA 19,00% $ 3.654
+T. CREDITO $ 22.890
+VUELTO $ 0
+`
+assert.equal(leerTexto(supermercado).monto, 22890)
+assert.deepEqual(leerTexto(supermercado).documentos, [])
+
 console.log("lectura ok")
