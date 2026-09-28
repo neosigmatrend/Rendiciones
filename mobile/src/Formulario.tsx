@@ -119,6 +119,7 @@ export function Formulario({
   const [lecturaFallida, setLecturaFallida] = useState(false)
   const [montosCandidatos, setMontosCandidatos] = useState<MontoCandidato[]>([])
   const [foliosCandidatos, setFoliosCandidatos] = useState<DocumentoLeido[]>([])
+  const [folioActivo, setFolioActivo] = useState<string | null>(null)
   const camaraAbierta = useRef(false)
 
   function actualizarDocumento(key: string, cambios: Partial<Borrador>) {
@@ -205,12 +206,19 @@ export function Formulario({
     }
   }
 
-  function alternarFolio(candidato: DocumentoLeido) {
-    setDocumentos((actuales) => {
-      const dentro = actuales.some((item) => item.folio === candidato.folio)
-      if (dentro) return actuales.filter((item) => item.folio !== candidato.folio)
-      return [...actuales, borradorLeido(candidato, actuales.length)]
-    })
+  function emparejar(folio: string, valor: number) {
+    const candidato = foliosCandidatos.find((item) => item.folio === folio)
+    setDocumentos((actuales) => [
+      ...actuales,
+      {
+        key: `par-${folio}-${Date.now()}`,
+        folio,
+        fecha: candidato?.fecha ?? "",
+        monto: formatMontoInput(valor),
+        tipo: candidato?.tipo ?? "factura",
+      },
+    ])
+    setFolioActivo(null)
   }
 
   useEffect(() => {
@@ -286,6 +294,9 @@ export function Formulario({
     folio: documento.folio,
     monto: parseCLP(documento.monto) ?? 0,
   }))
+  const foliosDisponibles = foliosCandidatos.filter(
+    (candidato) => !documentos.some((documento) => documento.folio === candidato.folio),
+  )
   const cuadre = cuadreDe(parseCLP(monto) ?? 0, documentosParaCuadre)
   const puedeConfirmar = cuadre.estado === "cuadra" || cuadre.estado === "sin_documentos"
   const fotoPrincipal = fotosNuevas[fotosNuevas.length - 1]?.uri ?? fotosGuardadas[0]?.uri
@@ -294,7 +305,7 @@ export function Formulario({
     return (
       <ScrollView contentContainerStyle={estilos.contenido}>
         <Text style={estilos.titulo}>Capturar pago</Text>
-        <Text style={estilos.version}>versión 9</Text>
+        <Text style={estilos.version}>versión 10</Text>
         <Text style={estilos.ayuda}>
           Fotografía la boleta o la pantalla del pago. La app lee el monto y los folios, comprueba que sumen el cargo y te pide confirmar.
         </Text>
@@ -409,38 +420,68 @@ export function Formulario({
           </>
         ) : null}
 
-        {foliosCandidatos.length > 0 ? (
-          <>
-            <Text style={estilos.seccion}>Folios en la captura</Text>
-            <Text style={estilos.ayuda}>Marca los que entran en este pago.</Text>
-            <View style={estilos.chips}>
-              {foliosCandidatos.map((candidato) => {
-                const elegido = documentos.some((item) => item.folio === candidato.folio)
-                return (
-                  <Pressable
-                    key={candidato.folio}
-                    onPress={() => alternarFolio(candidato)}
-                    style={[estilos.chip, elegido && estilos.chipActivo]}
-                  >
-                    <Text style={[estilos.chipTexto, elegido && estilos.chipTextoActivo]}>
-                      {elegido ? "✓ " : ""}
-                      {candidato.folio}
-                      {candidato.monto > 0 ? ` · ${formatCLP(candidato.monto)}` : ""}
-                    </Text>
-                  </Pressable>
-                )
-              })}
+        <Text style={estilos.seccion}>Documentos</Text>
+        {documentos.length === 0 ? (
+          <Text style={estilos.ayuda}>
+            {foliosCandidatos.length > 0 ? "Todavía no has emparejado ningún folio." : "Esta captura no trae folios."}
+          </Text>
+        ) : null}
+        {documentos.map((documento) => (
+          <View key={`par-${documento.key}`} style={estilos.par}>
+            <View style={estilos.flex}>
+              <Text style={estilos.documentoTitulo}>{documento.folio || "Sin folio"}</Text>
+              <Text style={estilos.ayuda}>{etiquetaTipo(documento.tipo)}</Text>
             </View>
-          </>
+            <Text style={estilos.documentoTitulo}>{formatCLP(parseCLP(documento.monto) ?? 0)}</Text>
+            <Pressable onPress={() => setDocumentos((actuales) => actuales.filter((item) => item.key !== documento.key))}>
+              <Text style={estilos.quitar}>Quitar</Text>
+            </Pressable>
+          </View>
+        ))}
+
+        {foliosDisponibles.length > 0 ? (
+          <View style={estilos.emparejar}>
+            <Text style={estilos.documentoTitulo}>Emparejar</Text>
+            <Text style={estilos.ayuda}>
+              {folioActivo
+                ? `Folio ${folioActivo} elegido. Ahora toca su monto.`
+                : "Toca un folio y después el monto que le corresponde."}
+            </Text>
+            <View style={estilos.chips}>
+              {foliosDisponibles.map((candidato) => (
+                <Pressable
+                  key={`libre-${candidato.folio}`}
+                  onPress={() => setFolioActivo((actual) => (actual === candidato.folio ? null : candidato.folio))}
+                  style={[estilos.chip, folioActivo === candidato.folio && estilos.chipActivo]}
+                >
+                  <Text style={[estilos.chipTexto, folioActivo === candidato.folio && estilos.chipTextoActivo]}>
+                    {candidato.folio}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            {folioActivo ? (
+              <View style={estilos.chips}>
+                {montosCandidatos.map((candidato) => (
+                  <Pressable
+                    key={`valor-${candidato.valor}-${candidato.etiqueta}`}
+                    onPress={() => emparejar(folioActivo, candidato.valor)}
+                    style={estilos.chip}
+                  >
+                    <Text style={estilos.chipTexto}>{formatCLP(candidato.valor)}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+          </View>
         ) : null}
 
-        <Text style={estilos.seccion}>Folios</Text>
-        {documentos.length === 0 ? <Text style={estilos.ayuda}>Esta captura no trae folios.</Text> : null}
-        {documentos.map((documento, indice) =>
+        {corrigiendo ? <Text style={estilos.seccion}>Corregir documentos</Text> : null}
+        {documentos.map((documento) =>
           corrigiendo ? (
             <View key={documento.key} style={estilos.documento}>
               <View style={estilos.documentoCabeza}>
-                <Text style={estilos.documentoTitulo}>Documento {indice + 1}</Text>
+                <Text style={estilos.documentoTitulo}>{documento.folio || "Sin folio"}</Text>
                 <Pressable onPress={() => setDocumentos((actuales) => actuales.filter((item) => item.key !== documento.key))}>
                   <Text style={estilos.quitar}>Quitar</Text>
                 </Pressable>
@@ -493,18 +534,7 @@ export function Formulario({
                 style={estilos.input}
               />
             </View>
-          ) : (
-            <View key={documento.key} style={estilos.documento}>
-              <Text style={estilos.documentoTitulo}>
-                {etiquetaTipo(documento.tipo)} {documento.folio || "sin folio"}
-              </Text>
-              <Text style={estilos.ayuda}>
-                {(documento.fecha ? formatFecha(documento.fecha) : "Sin fecha") +
-                  " · " +
-                  formatCLP(parseCLP(documento.monto) ?? 0)}
-              </Text>
-            </View>
-          ),
+          ) : null,
         )}
         {corrigiendo ? (
           <Boton
@@ -652,6 +682,20 @@ const estilos = StyleSheet.create({
   chipTextoActivo: { color: colores.primarioTexto },
   acciones: { gap: 8 },
   fotoGrande: { backgroundColor: "#DDD6C8", borderRadius: 16, height: 220, width: "100%" },
+  par: {
+    alignItems: "center",
+    backgroundColor: colores.tarjeta,
+    borderRadius: 14,
+    flexDirection: "row",
+    gap: 12,
+    padding: 12,
+  },
+  emparejar: {
+    backgroundColor: colores.tarjeta,
+    borderRadius: 14,
+    gap: 8,
+    padding: 12,
+  },
   documento: {
     backgroundColor: colores.tarjeta,
     borderColor: colores.borde,
