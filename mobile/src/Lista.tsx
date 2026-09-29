@@ -36,7 +36,7 @@ export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onN
   return (
     <ScrollView contentContainerStyle={estilos.contenido}>
       <Text style={estilos.marca}>Rendiciones</Text>
-      <Text style={estilos.version}>versión 14</Text>
+      <Text style={estilos.version}>versión 15</Text>
       <Text style={estilos.subtitulo}>Pagos con tarjeta</Text>
       <View style={estilos.resumen}>
         <Resumen etiqueta="Pagos" valor={String(visibles.length)} />

@@ -311,4 +311,45 @@ No. Código Detalle U.M. Precio Cantidad Descto. Total
 `
 assert.equal(leerTexto(soloLineaDeDetalle).monto, 45000)
 
+const boletaRevisionTecnica = `
+RUT: 96888000-4
+BOLETA ELECTRONICA No: 7196761
+SII VALPARAISO
+REVISIONES TECNICAS SAN DAMASO
+GIRO: PLANTA DE REVISION TECNICA PARA VEHICULOS AUTOMOTORES
+DIRECCION: AVDA. EYZAGUIRRE 3649 , PUENTE ALTO PUENTE ALTO
+COMUNA: PUENTE ALTO
+SRES: ROSA GRICEL BARRAZA BARRAZA
+DIRECCION: JOAQUIN PALACIOS
+COMUNA: CORDILLERA
+RUT: 11876872-8
+FORMA PAGO: TARJETA DE DEBITO
+DETALLE:
+1,00 X 13.600
+INSP-R KDWW76 CLASS B - Automovil $ 13.600
+OBSERVACIONES:
+NETO: $ 11.429
+IVA: $ 2.171
+TOTAL: $ 13.600
+FECHA: 2026-09-24
+Timbre Electronico SII RES. 80 de 2014
+`
+const revision = leerTexto(boletaRevisionTecnica)
+assert.equal(revision.monto, 13600)
+assert.equal(revision.fecha, "2026-09-24")
+assert.deepEqual(
+  revision.documentos.map((item) => `${item.tipo} ${item.folio} ${item.monto} ${item.fecha}`),
+  ["boleta 7196761 13600 2026-09-24"],
+)
+assert.equal(revision.montosCandidatos.some((item) => item.valor === 96888000), false)
+assert.equal(revision.montosCandidatos.some((item) => item.valor === 11876872), false)
+
+const facturaConPalabra = `
+FACTURA ELECTRONICA No 884455
+Total $ 90.000
+`
+assert.deepEqual(leerTexto(facturaConPalabra).documentos.map((item) => `${item.tipo} ${item.folio}`), [
+  "factura 884455",
+])
+
 console.log("candidatos ok")

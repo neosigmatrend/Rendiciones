@@ -53,7 +53,7 @@ const MESES: Record<string, number> = {
 }
 
 const FOLIO_RE =
-  /(?:#\s*|(?:^|[^A-Za-zÁÉÍÓÚáéíóúÑñ])(?:folio\s*:?\s*(?:n[°ºo0*.]{0,3}\s*:?\s*)?|(?:factura|boleta|documento|doc\.?)\s*(?:n[°ºo0*.]{0,3}\s*:?\s*)?))(\d{5,12}|\d{1,3}(?:[.,]\d{3}){1,3})(?!\d)/gi
+  /(?:#\s*|(?:^|[^A-Za-zÁÉÍÓÚáéíóúÑñ])(?:folio\s*:?\s*(?:n[°ºo0*.]{0,3}\s*:?\s*)?|(?:factura|boleta|documento|doc\.?)\s*(?:electr[oó]nica|afecta|exenta|no\s+afecta|manual|de\s+venta)?\s*(?:n[°ºo0*.]{0,3}\s*:?\s*)?))(\d{5,12}|\d{1,3}(?:[.,]\d{3}){1,3})(?!\d)/gi
 
 const FOLIO_LINEA_RE =
   /(?:^|\n)\s*n[°ºo]\.?\s*:?\s*(\d{5,12}|\d{1,3}(?:[.,]\d{3}){1,3})(?!\d)/gi
@@ -65,6 +65,8 @@ const FECHA_TEXTO_RE =
   /\b(\d{1,2})\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre|ene|feb|mar|abr|may|jun|jul|ago|sep|set|sept|oct|nov|dic)\.?\s+(\d{4})\b/gi
 
 const FECHA_NUMERO_RE = /\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})\b/g
+
+const FECHA_ISO_RE = /\b(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})\b/g
 
 const DISTANCIA_FOLIO_MONTO = 120
 
@@ -380,6 +382,17 @@ export function leerTexto(entrada: string): Lectura {
     tokens.push({ tipo: "fecha", valor, index, fin })
   }
 
+  for (const match of texto.matchAll(FECHA_ISO_RE)) {
+    if (match.index == null) continue
+    const valor = isoValida(Number(match[1]), Number(match[2]), Number(match[3]))
+    if (!valor) continue
+    const index = match.index
+    const fin = index + match[0].length
+    if (cruza(index, fin, ocupados)) continue
+    ocupados.push({ index, fin })
+    tokens.push({ tipo: "fecha", valor, index, fin })
+  }
+
   for (const match of texto.matchAll(FECHA_NUMERO_RE)) {
     if (match.index == null) continue
     const valor = fechaNumero(Number(match[1]), Number(match[2]), Number(match[3]))
@@ -485,7 +498,6 @@ export function leerTexto(entrada: string): Lectura {
   const elegidos = pares.filter((documento) => marcados.has(documento.folio))
   const emparejados =
     elegidos.length > 0 ? elegidos : elegirDocumentos(pares, comprobado ?? total ?? subtotal, cantidadUtil)
-  const fechaPago = fechaDePago(texto, tokens) ?? fechasSueltas[0] ?? null
   const palabras = montoEnPalabras(texto)
   const utiles = montos.filter((monto) => !monto.ignorar)
   const igualPalabras = palabras != null ? utiles.find((monto) => monto.valor === palabras)?.valor ?? null : null
@@ -497,6 +509,8 @@ export function leerTexto(entrada: string): Lectura {
     comprobado ?? cargo ?? total ?? subtotal ?? igualPalabras ?? (emparejados.length > 0 ? suma : null) ?? unico ?? palabras
   const documentos =
     foliosCandidatos.length === 1 && monto != null ? [{ ...foliosCandidatos[0], monto }] : emparejados
+  const fechaUnica = documentos.length === 1 ? documentos[0].fecha || null : null
+  const fechaPago = fechaDePago(texto, tokens) ?? fechasSueltas[0] ?? fechaUnica
 
   return {
     monto,
