@@ -8,10 +8,13 @@
     "userInterfaceStyle": "light",
     "scheme": "rendiciones",
     "ios": {
+      "bundleIdentifier": "com.neosigmatrend.rendiciones",
+      "buildNumber": "1",
       "supportsTablet": true,
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Rendiciones adjunta la captura de la pantalla de pago.",
-        "NSCameraUsageDescription": "Rendiciones puede fotografiar el comprobante del pago."
+        "NSCameraUsageDescription": "Rendiciones puede fotografiar el comprobante del pago.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {

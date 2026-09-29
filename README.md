@@ -33,6 +33,23 @@ Los pagos quedan guardados en el teléfono. Agrosuper, Gasco y Aguas Andinas apa
 
 La captura se envía a OCR.space para leerla. El teléfono necesita internet. Si la lectura no cuadra, se corrige antes de confirmar. Si no logra leerla, la foto queda y esos datos se completan en la confirmación.
 
+## App Store, paso 1
+
+La app que se instala desde Expo Go no entra a la tienda. El identificador ya quedó fijado en `com.neosigmatrend.rendiciones`. No se cambia después del primer build.
+
+En el Mac, con la cuenta de Apple Developer ya pagada:
+
+```bash
+cd ~/Desktop/Proyectos/Rendiciones
+git pull
+cd mobile
+npx eas-cli@latest login
+npx eas-cli@latest init
+npx eas-cli@latest build --platform ios --profile production
+```
+
+`login` pide la cuenta de Expo. `init` crea el proyecto en Expo y guarda el identificador en `app.json`. `build` pide la cuenta de Apple Developer, firma la app en la nube y deja un binario listo para TestFlight. El resultado no se instala con el QR de Expo Go.
+
 ## Folio para la cartola
 
 Cada pago muestra el folio con el formato de la planilla del banco y la exportación lo trae en la columna `folio_banco`:
