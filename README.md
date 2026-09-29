@@ -33,6 +33,32 @@ Los pagos quedan guardados en el teléfono. Agrosuper, Gasco y Aguas Andinas apa
 
 La captura se envía a OCR.space para leerla. El teléfono necesita internet. Si la lectura no cuadra, se corrige antes de confirmar. Si no logra leerla, la foto queda y esos datos se completan en la confirmación.
 
-## Web
+## Folio para la cartola
 
-En la raíz del repositorio también hay una versión web (`npm run dev`, puerto 3847). La app para usar al pagar es la de Expo Go.
+Cada pago muestra el folio con el formato de la planilla del banco y la exportación lo trae en la columna `folio_banco`:
+
+- `FA 2342355245` una factura
+- `FA 564698-09090993` varias facturas
+- `BOL 2310943094` una boleta
+- `BOL 1231231212-345345345` varias boletas
+- el texto tal cual cuando el documento es de tipo Otro (invoice de compras internacionales)
+
+## Conciliar con la cartola, en el Mac
+
+En la raíz del repositorio hay una versión web del mismo proyecto. Ahí vive la página que cruza la cartola del banco con los pagos del teléfono:
+
+```bash
+cd ~/Desktop/Proyectos/Rendiciones
+npm install
+npm run dev
+```
+
+Abre http://localhost:3847/conciliar. El trabajo es pegar y copiar:
+
+1. En Excel copias desde la fila de títulos (FECHA, DESCRIPCION, MONTO…) hasta el último movimiento y lo pegas en el primer recuadro.
+2. Cargas el `rendicion.csv` que exportas desde el teléfono, o usas los pagos guardados en ese computador.
+3. La página empareja por monto y fecha, deja `RENDICION` en los movimientos con respaldo, `PTC` en los pagos de la tarjeta, el folio en tu formato y una observación cuando algo necesita revisión. El botón copia las tres columnas y las pegas en la columna CATEGORIA de tu planilla.
+
+Cada fila tiene una lista para cambiar el pago a mano, y abajo aparecen los pagos de la app que no encontraron movimiento. Nada se sube a internet: la página corre en el computador.
+
+La app para usar al pagar sigue siendo la de Expo Go.
