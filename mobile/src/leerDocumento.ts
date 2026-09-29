@@ -335,6 +335,37 @@ function esEtiqueta(linea: string): boolean {
   return !/\d{1,3}[.,]\d{3}|\d{3,}/.test(limpia)
 }
 
+function esEtiquetaMonto(linea: string): boolean {
+  if (!esEtiqueta(linea) || /\d/.test(linea) || esEncabezado(linea)) return false
+  const rol = rolDeLinea(sinAcento(linea))
+  return rol === "neto" || rol === "iva" || rol === "total" || rol === "subtotal"
+}
+
+function asignarRolesPendientes(texto: string, montos: Extract<Token, { tipo: "monto" }>[]) {
+  const pendientes: Exclude<RolMonto, null>[] = []
+  let desde = -1
+  let cursor = 0
+  for (const linea of texto.split("\n")) {
+    const fin = cursor + linea.length
+    const rol = esEtiquetaMonto(linea) ? rolDeLinea(sinAcento(linea)) : null
+    if (rol === "neto" || rol === "iva" || rol === "total" || rol === "subtotal") {
+      const cubierto = montos.some((monto) => monto.rol && monto.index >= fin && monto.index - fin <= 40)
+      if (!cubierto) {
+        if (desde < 0) desde = fin
+        pendientes.push(rol)
+      }
+    }
+    cursor = fin + 1
+  }
+  if (pendientes.length === 0) return
+  const sueltos = montos.filter((monto) => !monto.rol && monto.index > desde)
+  if (sueltos.length < pendientes.length) return
+  const elegidos = sueltos.slice(sueltos.length - pendientes.length)
+  pendientes.forEach((rol, indice) => {
+    elegidos[indice].rol = rol
+  })
+}
+
 // El OCR de una boleta angosta suele soltar las etiquetas en un bloque y sus
 // montos en otro. Cuando los dos bloques tienen el mismo largo, se juntan línea
 // a línea para que cada monto recupere su etiqueta.
@@ -344,7 +375,7 @@ function alinearColumnas(texto: string): string {
   let inicio = 0
   while (inicio < lineas.length) {
     let finEtiquetas = inicio
-    while (finEtiquetas < lineas.length && esEtiqueta(lineas[finEtiquetas])) finEtiquetas++
+    while (finEtiquetas < lineas.length && esEtiquetaMonto(lineas[finEtiquetas])) finEtiquetas++
     const etiquetas = finEtiquetas - inicio
     if (etiquetas < 2) {
       salida.push(lineas[inicio])
@@ -462,6 +493,7 @@ export function leerTexto(entrada: string): Lectura {
   }
 
   const montos = tokens.filter((token) => token.tipo === "monto")
+  asignarRolesPendientes(texto, montos)
   for (const monto of montos) {
     if (monto.rol === "iva" || monto.rol === "neto") monto.ignorar = true
   }

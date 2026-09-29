@@ -73,7 +73,10 @@ async function pedirTexto(
 
 function interpretar(texto: string): ResultadoFoto {
   const lectura = leerTexto(texto)
-  if (lectura.monto == null && lectura.documentos.length === 0) return { ok: false, motivo: "sin_datos", texto }
+  const hayCandidatos = lectura.montosCandidatos.length > 0 || lectura.foliosCandidatos.length > 0
+  if (lectura.monto == null && lectura.documentos.length === 0 && !hayCandidatos) {
+    return { ok: false, motivo: "sin_datos", texto }
+  }
   return { ok: true, lectura, texto }
 }
 

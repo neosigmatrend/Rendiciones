@@ -400,4 +400,40 @@ assert.deepEqual(leerTexto(facturaConPalabra).documentos.map((item) => `${item.t
   "factura 884455",
 ])
 
+const facturaQuesos = `COD PROD
+CAJ
+838614509
+827514520
+2
+NOMBRE
+CANT
+KILOS
+83865F - QUESO MOZZARELLA NACIONAL
+15.6
+82750F - QUESO MANTECOSO RUMAY 6X1
+7.8
+PRECIO
+4.950
+5.800
+NETO
+IVA
+TOTAL
+19.0%
+CONDICION VENTA
+TRANSFERENCIA
+Productos de Venta por Unidad: los kilos que se indican son solo referenciales.
+VALOR
+77.220
+45.240
+122.460
+23.267
+145.727`
+const quesos = leerTexto(facturaQuesos)
+assert.equal(quesos.monto, 145727)
+assert.deepEqual(quesos.documentos, [])
+assert.deepEqual(
+  quesos.montosCandidatos.map((item) => `${item.valor} ${item.etiqueta}`),
+  ["122460 Neto", "23267 IVA", "145727 Total"],
+)
+
 console.log("candidatos ok")

@@ -345,7 +345,7 @@ export function Formulario({
     return (
       <ScrollView contentContainerStyle={estilos.contenido}>
         <Text style={estilos.titulo}>Capturar pago</Text>
-        <Text style={estilos.version}>versión 17</Text>
+        <Text style={estilos.version}>versión 18</Text>
         <Text style={estilos.ayuda}>
           Fotografía la boleta o la pantalla del pago. La app lee el monto y los folios, comprueba que sumen el cargo y te pide confirmar.
         </Text>
@@ -372,7 +372,7 @@ export function Formulario({
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={estilos.flex}>
       <ScrollView contentContainerStyle={estilos.contenido} keyboardShouldPersistTaps="handled">
         <Text style={estilos.titulo}>{pago ? "Revisar pago" : "Confirmar pago"}</Text>
-        <Text style={estilos.version}>versión 17</Text>
+        <Text style={estilos.version}>versión 18</Text>
         <Text style={estilos.ayuda}>
           {puedeConfirmar
             ? "Esto es lo que leí en la captura. Si está bien, confirma."
