@@ -1,3 +1,4 @@
+import { folioBanco } from "@/lib/conciliar"
 import { cuadreDe, etiquetaCuadre, mesDeFecha } from "@/lib/format"
 import { listarPagos } from "@/lib/store"
 
@@ -15,11 +16,13 @@ export async function GET(request: Request) {
   const visibles = mes && /^\d{4}-\d{2}$/.test(mes) ? pagos.filter((pago) => mesDeFecha(pago.fecha) === mes) : pagos
 
   const encabezado = [
+    "pago_id",
     "fecha",
     "proveedor",
     "descripcion",
     "tarjeta",
     "monto_pago",
+    "folio_banco",
     "folio",
     "tipo",
     "fecha_documento",
@@ -29,30 +32,28 @@ export async function GET(request: Request) {
   ]
 
   const filas = visibles.flatMap((pago) => {
-    const cuadre = cuadreDe(pago.monto, pago.documentos)
+    const estado = etiquetaCuadre(cuadreDe(pago.monto, pago.documentos))
+    const ejemplo = pago.ejemplo ? "si" : "no"
     const base = [
+      pago.id,
       pago.fecha,
       pago.proveedor,
       pago.descripcion,
       pago.tarjeta,
       pago.monto,
-      pago.ejemplo ? "si" : "no",
+      folioBanco(pago.documentos),
     ]
     if (pago.documentos.length === 0) {
-      return [[base[0], base[1], base[2], base[3], base[4], "", "", "", "", etiquetaCuadre(cuadre), base[5]]]
+      return [[...base, "", "", "", "", estado, ejemplo]]
     }
     return pago.documentos.map((documento) => [
-      pago.fecha,
-      pago.proveedor,
-      pago.descripcion,
-      pago.tarjeta,
-      pago.monto,
+      ...base,
       documento.folio,
       documento.tipo,
       documento.fecha,
       documento.monto,
-      etiquetaCuadre(cuadre),
-      pago.ejemplo ? "si" : "no",
+      estado,
+      ejemplo,
     ])
   })
 

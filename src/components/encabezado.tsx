@@ -11,11 +11,16 @@ export function Encabezado({ accion = true }: { accion?: boolean }) {
           </span>
           <span className="mt-1 block text-sm text-muted-foreground">Pagos con tarjeta</span>
         </Link>
-        {accion ? (
-          <Link href="/pagos/nuevo" className={buttonVariants({ size: "lg" })}>
-            Capturar pago
+        <div className="flex items-center gap-2">
+          <Link href="/conciliar" className={buttonVariants({ variant: "outline", size: "lg" })}>
+            Conciliar
           </Link>
-        ) : null}
+          {accion ? (
+            <Link href="/pagos/nuevo" className={buttonVariants({ size: "lg" })}>
+              Capturar pago
+            </Link>
+          ) : null}
+        </div>
       </div>
     </header>
   )
