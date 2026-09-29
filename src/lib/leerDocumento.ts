@@ -558,7 +558,10 @@ export function leerTexto(entrada: string): Lectura {
   return {
     monto,
     documentos,
-    montosCandidatos: candidatosDeMonto(montos),
+    montosCandidatos: candidatosDeMonto(
+      montos,
+      tokens.filter((token) => token.tipo === "folio"),
+    ),
     foliosCandidatos,
     proveedor: proveedorDe(texto),
     fecha: fechaPago,
@@ -575,16 +578,33 @@ const ETIQUETA_ROL: Record<Exclude<RolMonto, null>, string> = {
   subtotal: "Subtotal",
 }
 
-function candidatosDeMonto(montos: Extract<Token, { tipo: "monto" }>[]): MontoCandidato[] {
+function cercaDeFolio(index: number, folios: { fin: number }[]): boolean {
+  return folios.some((folio) => index >= folio.fin && index - folio.fin <= DISTANCIA_FOLIO_MONTO)
+}
+
+function candidatosDeMonto(
+  montos: Extract<Token, { tipo: "monto" }>[],
+  folios: { fin: number }[],
+): MontoCandidato[] {
   const vistos = new Map<string, MontoCandidato>()
   for (const monto of montos) {
     const etiqueta = monto.rol ? ETIQUETA_ROL[monto.rol] : "Sin etiqueta"
     const clave = `${monto.valor}-${etiqueta}`
     if (!vistos.has(clave)) vistos.set(clave, { valor: monto.valor, etiqueta })
   }
-  const todos = [...vistos.values()]
-  const etiquetados = todos.filter((candidato) => candidato.etiqueta !== "Sin etiqueta")
-  return etiquetados.length > 0 ? etiquetados : todos.slice(0, 12)
+  const etiquetados = [...vistos.values()].filter((candidato) => candidato.etiqueta !== "Sin etiqueta")
+  const yaVistos = new Set(etiquetados.map((candidato) => candidato.valor))
+  const tope = etiquetados.reduce((maximo, candidato) => Math.max(maximo, candidato.valor), 0)
+  const sueltos: MontoCandidato[] = []
+  for (const monto of montos) {
+    if (monto.rol || yaVistos.has(monto.valor)) continue
+    const vale = (tope > 0 && monto.valor >= tope) || cercaDeFolio(monto.index, folios)
+    if (!vale || sueltos.some((candidato) => candidato.valor === monto.valor)) continue
+    sueltos.push({ valor: monto.valor, etiqueta: "Sin etiqueta" })
+    yaVistos.add(monto.valor)
+  }
+  const lista = etiquetados.length > 0 ? [...etiquetados, ...sueltos] : [...vistos.values()]
+  return lista.slice(0, 12)
 }
 
 function descripcionDe(texto: string): string | null {

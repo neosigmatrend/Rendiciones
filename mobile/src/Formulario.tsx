@@ -248,6 +248,16 @@ export function Formulario({
     setFolioActivo(null)
   }
 
+  function elegirMonto(valor: number) {
+    const texto = formatMontoInput(valor)
+    setMonto(texto)
+    setMontoManual(true)
+    setDocumentos((actuales) =>
+      actuales.length === 1 ? actuales.map((item) => ({ ...item, monto: texto })) : actuales,
+    )
+    setFolioActivo(null)
+  }
+
   useEffect(() => {
     if (pago || camaraAbierta.current) return
     camaraAbierta.current = true
@@ -335,7 +345,7 @@ export function Formulario({
     return (
       <ScrollView contentContainerStyle={estilos.contenido}>
         <Text style={estilos.titulo}>Capturar pago</Text>
-        <Text style={estilos.version}>versión 16</Text>
+        <Text style={estilos.version}>versión 17</Text>
         <Text style={estilos.ayuda}>
           Fotografía la boleta o la pantalla del pago. La app lee el monto y los folios, comprueba que sumen el cargo y te pide confirmar.
         </Text>
@@ -362,6 +372,7 @@ export function Formulario({
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={estilos.flex}>
       <ScrollView contentContainerStyle={estilos.contenido} keyboardShouldPersistTaps="handled">
         <Text style={estilos.titulo}>{pago ? "Revisar pago" : "Confirmar pago"}</Text>
+        <Text style={estilos.version}>versión 17</Text>
         <Text style={estilos.ayuda}>
           {puedeConfirmar
             ? "Esto es lo que leí en la captura. Si está bien, confirma."
@@ -427,36 +438,49 @@ export function Formulario({
           </View>
         ))}
 
-        {foliosDisponibles.length > 0 ? (
+        {foliosCandidatos.length > 0 || montosCandidatos.length > 0 ? (
           <View style={estilos.emparejar}>
-            <Text style={estilos.documentoTitulo}>Emparejar</Text>
+            <Text style={estilos.documentoTitulo}>Leído en la captura</Text>
             <Text style={estilos.ayuda}>
               {folioActivo
                 ? `Folio ${folioActivo} elegido. Ahora toca su monto.`
-                : "Toca un folio y después el monto que le corresponde."}
+                : foliosDisponibles.length > 0
+                  ? "Toca un folio y después su monto. Si el cargo es uno solo, toca el monto directo."
+                  : "Toca el monto que corresponde al cargo."}
             </Text>
-            <View style={estilos.chips}>
-              {foliosDisponibles.map((candidato) => (
-                <Pressable
-                  key={`libre-${candidato.folio}`}
-                  onPress={() => setFolioActivo((actual) => (actual === candidato.folio ? null : candidato.folio))}
-                  style={[estilos.chip, folioActivo === candidato.folio && estilos.chipActivo]}
-                >
-                  <Text style={[estilos.chipTexto, folioActivo === candidato.folio && estilos.chipTextoActivo]}>
-                    {candidato.folio}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-            {folioActivo ? (
+            {foliosCandidatos.length > 0 ? (
+              <View style={estilos.chips}>
+                {foliosCandidatos.map((candidato) => {
+                  const usado = !foliosDisponibles.some((libre) => libre.folio === candidato.folio)
+                  return (
+                    <Pressable
+                      key={`libre-${candidato.folio}`}
+                      disabled={usado}
+                      onPress={() => setFolioActivo((actual) => (actual === candidato.folio ? null : candidato.folio))}
+                      style={[estilos.chip, folioActivo === candidato.folio && estilos.chipActivo, usado && estilos.chipUsado]}
+                    >
+                      <Text style={[estilos.chipTexto, folioActivo === candidato.folio && estilos.chipTextoActivo]}>
+                        {candidato.folio}
+                      </Text>
+                    </Pressable>
+                  )
+                })}
+              </View>
+            ) : null}
+            {montosCandidatos.length > 0 ? (
               <View style={estilos.chips}>
                 {montosCandidatos.map((candidato) => (
                   <Pressable
                     key={`valor-${candidato.valor}-${candidato.etiqueta}`}
-                    onPress={() => emparejar(folioActivo, candidato.valor)}
+                    onPress={() =>
+                      folioActivo ? emparejar(folioActivo, candidato.valor) : elegirMonto(candidato.valor)
+                    }
                     style={estilos.chip}
                   >
-                    <Text style={estilos.chipTexto}>{formatCLP(candidato.valor)}</Text>
+                    <Text style={estilos.chipTexto}>
+                      {formatCLP(candidato.valor)}
+                      {candidato.etiqueta !== "Sin etiqueta" ? ` · ${candidato.etiqueta}` : ""}
+                    </Text>
                   </Pressable>
                 ))}
               </View>
@@ -712,6 +736,7 @@ const estilos = StyleSheet.create({
   chipActivo: { backgroundColor: colores.primario, borderColor: colores.primario },
   chipTexto: { color: colores.tinta, fontSize: 14, fontWeight: "600" },
   chipTextoActivo: { color: colores.primarioTexto },
+  chipUsado: { opacity: 0.45 },
   acciones: { gap: 8 },
   fotoGrande: { backgroundColor: "#DDD6C8", borderRadius: 16, height: 220, width: "100%" },
   par: {
