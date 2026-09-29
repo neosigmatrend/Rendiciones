@@ -344,6 +344,45 @@ assert.deepEqual(
 assert.equal(revision.montosCandidatos.some((item) => item.valor === 96888000), false)
 assert.equal(revision.montosCandidatos.some((item) => item.valor === 11876872), false)
 
+// Texto tal como lo devuelve OCR.space para esta boleta: las etiquetas en un
+// bloque, sus montos en el siguiente, y NETO leído como HETO.
+const boletaEnColumnas = `RUT: 96808
+BOLETA FLECTRONICA No: 7196751
+REVISIONES TECNICAS SAN DAMASO
+GIRO: PLANTA DE REVISION TECNICA PARA VEMICULOS AUTOMOTORES
+DIRECCION: AUDA. EYZAGUIRRE 3649, PUENTE ALTO PUENTE ALTO
+COMUNA: PUENTE ALTO
+SRES: ROSA GRICEL BARRAZA BARRAZA
+DIRECCION: JOAQUIN PALACIOS
+GIRO:
+COMUNA: CORDILLERA
+RUT: 11876872-8
+FORMA PAGO: TARJETA DE DEBITO
+DETALLE:
+1.00 X 13.600
+INSP-R KDUW76 CLASS B - Automovil
+OBSERVACIONES:
+13.600
+HETO: $
+IVA: $
+TOTAL: $
+11.429
+2.171
+13.600
+FECHA: 2026-09-24
+Timbre Electronico SII RES. 80 de 201`
+const columnas = leerTexto(boletaEnColumnas)
+assert.equal(columnas.monto, 13600)
+assert.equal(columnas.fecha, "2026-09-24")
+assert.deepEqual(
+  columnas.documentos.map((item) => `${item.tipo} ${item.folio} ${item.monto}`),
+  ["boleta 7196751 13600"],
+)
+assert.deepEqual(
+  columnas.montosCandidatos.map((item) => `${item.valor} ${item.etiqueta}`),
+  ["11429 Neto", "2171 IVA", "13600 Total"],
+)
+
 const facturaConPalabra = `
 FACTURA ELECTRONICA No 884455
 Total $ 90.000

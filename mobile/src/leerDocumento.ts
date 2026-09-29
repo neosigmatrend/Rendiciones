@@ -53,7 +53,7 @@ const MESES: Record<string, number> = {
 }
 
 const FOLIO_RE =
-  /(?:#\s*|(?:^|[^A-Za-zÁÉÍÓÚáéíóúÑñ])(?:folio\s*:?\s*(?:n[°ºo0*.]{0,3}\s*:?\s*)?|(?:factura|boleta|documento|doc\.?)\s*(?:electr[oó]nica|afecta|exenta|no\s+afecta|manual|de\s+venta)?\s*(?:n[°ºo0*.]{0,3}\s*:?\s*)?))(\d{5,12}|\d{1,3}(?:[.,]\d{3}){1,3})(?!\d)/gi
+  /(?:#\s*|(?:^|[^A-Za-zÁÉÍÓÚáéíóúÑñ])(?:folio\s*:?\s*(?:n[°ºo0*.]{0,3}\s*:?\s*)?|(?:factura|boleta|documento|doc\.?)\s+[a-záéíóúñ]{3,14}\s*n[°ºo0*.]{0,3}\s*:?\s*|(?:factura|boleta|documento|doc\.?)\s*(?:n[°ºo0*.]{0,3}\s*:?\s*)?))(\d{5,12}|\d{1,3}(?:[.,]\d{3}){1,3})(?!\d)/gi
 
 const FOLIO_LINEA_RE =
   /(?:^|\n)\s*n[°ºo]\.?\s*:?\s*(\d{5,12}|\d{1,3}(?:[.,]\d{3}){1,3})(?!\d)/gi
@@ -191,7 +191,7 @@ function rolDeLinea(texto: string): RolMonto {
   const marcas: [Exclude<RolMonto, null>, RegExp][] = [
     ["iva", /total\s*iva/g],
     ["iva", /(?<![a-z])iva(?![a-z])/g],
-    ["neto", /(?<![a-z])neto(?![a-z])/g],
+    ["neto", /(?<![a-z])[hn]eto(?![a-z])/g],
     ["subtotal", /sub\s*total/g],
     ["vuelto", /(?<![a-z])(?:vuelto|cambio|propina)(?![a-z])/g],
     ["total", /(?<![a-z])total(?![a-z])/g],
@@ -323,6 +323,49 @@ function elegirDocumentos(
   return documentos
 }
 
+const LINEA_VALOR = /^\$?\s*(?:\d{1,3}(?:[.,]\d{3})+|\d{1,9})\s*\$?$/
+
+function esValor(linea: string): boolean {
+  return LINEA_VALOR.test(linea.trim())
+}
+
+function esEtiqueta(linea: string): boolean {
+  const limpia = linea.trim()
+  if ((limpia.match(/[A-Za-zÁÉÍÓÚáéíóúÑñ]/g) ?? []).length < 2) return false
+  return !/\d{1,3}[.,]\d{3}|\d{3,}/.test(limpia)
+}
+
+// El OCR de una boleta angosta suele soltar las etiquetas en un bloque y sus
+// montos en otro. Cuando los dos bloques tienen el mismo largo, se juntan línea
+// a línea para que cada monto recupere su etiqueta.
+function alinearColumnas(texto: string): string {
+  const lineas = texto.split("\n")
+  const salida: string[] = []
+  let inicio = 0
+  while (inicio < lineas.length) {
+    let finEtiquetas = inicio
+    while (finEtiquetas < lineas.length && esEtiqueta(lineas[finEtiquetas])) finEtiquetas++
+    const etiquetas = finEtiquetas - inicio
+    if (etiquetas < 2) {
+      salida.push(lineas[inicio])
+      inicio++
+      continue
+    }
+    let finValores = finEtiquetas
+    while (finValores < lineas.length && esValor(lineas[finValores])) finValores++
+    if (finValores - finEtiquetas !== etiquetas) {
+      for (let linea = inicio; linea < finEtiquetas; linea++) salida.push(lineas[linea])
+      inicio = finEtiquetas
+      continue
+    }
+    for (let paso = 0; paso < etiquetas; paso++) {
+      salida.push(`${lineas[inicio + paso].trim()} ${lineas[finEtiquetas + paso].trim()}`)
+    }
+    inicio = finValores
+  }
+  return salida.join("\n")
+}
+
 function esRut(texto: string, index: number, fin: number): boolean {
   if (/^\s*-\s*[\dkK](?![\dkK])/.test(texto.slice(fin, fin + 4))) return true
   return /r\.?\s*u\.?\s*t\.?\s*:?\s*$/i.test(texto.slice(Math.max(0, index - 12), index))
@@ -338,7 +381,7 @@ function lineaAnteriorProhibida(texto: string, index: number): boolean {
 }
 
 export function leerTexto(entrada: string): Lectura {
-  const texto = entrada.replace(/\u00a0/g, " ")
+  const texto = alinearColumnas(entrada.replace(/\u00a0/g, " "))
   const ocupados: Intervalo[] = []
   const tokens: Token[] = []
 
