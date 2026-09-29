@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { Alert, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native"
 import { usePagos } from "./contexto"
-import { etiquetaTipo, formatCLP, formatFecha, formatFechaLarga } from "./format"
+import { etiquetaTipo, folioBanco, formatCLP, formatFecha, formatFechaLarga } from "./format"
 import { Boton, PanelTotal, colores } from "./ui"
 
 export function Detalle({
@@ -20,6 +20,7 @@ export function Detalle({
   const [fotoAbierta, setFotoAbierta] = useState<string | null>(null)
   const [verTexto, setVerTexto] = useState(false)
   const textoLeido = pago?.fotos.find((foto) => foto.texto?.trim())?.texto
+  const folioCartola = pago ? folioBanco(pago.documentos) : ""
 
   if (!pago) {
     return (
@@ -54,6 +55,15 @@ export function Detalle({
       <Text style={estilos.ayuda}>{[pago.descripcion, pago.tarjeta].filter(Boolean).join(" · ")}</Text>
       {pago.ejemplo ? <Text style={estilos.ejemplo}>Ejemplo</Text> : null}
       <PanelTotal monto={pago.monto} documentos={pago.documentos} />
+
+      {folioCartola ? (
+        <View style={estilos.cartola}>
+          <Text style={estilos.etiqueta}>Folio para la cartola</Text>
+          <Text selectable style={estilos.folioCartola}>
+            {folioCartola}
+          </Text>
+        </View>
+      ) : null}
 
       <Text style={estilos.seccion}>Capturas</Text>
       {pago.fotos.length === 0 ? (
@@ -142,6 +152,9 @@ const estilos = StyleSheet.create({
   },
   seccion: { color: colores.tinta, fontSize: 20, fontWeight: "700", marginTop: 6 },
   vacio: { color: colores.muted, fontSize: 15, lineHeight: 21 },
+  cartola: { backgroundColor: colores.tarjeta, borderRadius: 14, gap: 2, padding: 14 },
+  etiqueta: { color: colores.muted, fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
+  folioCartola: { color: colores.tinta, fontSize: 20, fontWeight: "700" },
   fotos: { gap: 8 },
   foto: { backgroundColor: "#DDD6C8", borderRadius: 12, height: 140, width: 180 },
   fotoArchivo: { justifyContent: "center", padding: 12 },

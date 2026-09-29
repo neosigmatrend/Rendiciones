@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import * as Sharing from "expo-sharing"
 import { File, Paths } from "expo-file-system"
 import { usePagos } from "./contexto"
-import { cuadreDe, etiquetaCuadre, etiquetaMes, etiquetaTipo, formatCLP, formatFecha, mesDeFecha } from "./format"
+import { cuadreDe, etiquetaCuadre, etiquetaMes, etiquetaTipo, folioBanco, formatCLP, formatFecha, mesDeFecha } from "./format"
 import type { Pago } from "./types"
 import { Boton, colores } from "./ui"
 
@@ -36,7 +36,7 @@ export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onN
   return (
     <ScrollView contentContainerStyle={estilos.contenido}>
       <Text style={estilos.marca}>Rendiciones</Text>
-      <Text style={estilos.version}>versión 13</Text>
+      <Text style={estilos.version}>versión 14</Text>
       <Text style={estilos.subtitulo}>Pagos con tarjeta</Text>
       <View style={estilos.resumen}>
         <Resumen etiqueta="Pagos" valor={String(visibles.length)} />
@@ -117,20 +117,32 @@ function celda(valor: string | number) {
 }
 
 async function exportar(pagos: Pago[], mes: string | null) {
-  const encabezado = ["fecha", "proveedor", "descripcion", "tarjeta", "monto_pago", "folio", "tipo", "fecha_documento", "monto_documento", "estado", "ejemplo"]
+  const encabezado = [
+    "pago_id",
+    "fecha",
+    "proveedor",
+    "descripcion",
+    "tarjeta",
+    "monto_pago",
+    "folio_banco",
+    "folio",
+    "tipo",
+    "fecha_documento",
+    "monto_documento",
+    "estado",
+    "ejemplo",
+  ]
   const filas = pagos.flatMap((pago) => {
     const cuadre = cuadreDe(pago.monto, pago.documentos)
     const estado = etiquetaCuadre(cuadre)
     const ejemplo = pago.ejemplo ? "si" : "no"
+    const folio = folioBanco(pago.documentos)
+    const base = [pago.id, pago.fecha, pago.proveedor, pago.descripcion, pago.tarjeta, pago.monto, folio]
     if (pago.documentos.length === 0) {
-      return [[pago.fecha, pago.proveedor, pago.descripcion, pago.tarjeta, pago.monto, "", "", "", "", estado, ejemplo]]
+      return [[...base, "", "", "", "", estado, ejemplo]]
     }
     return pago.documentos.map((documento) => [
-      pago.fecha,
-      pago.proveedor,
-      pago.descripcion,
-      pago.tarjeta,
-      pago.monto,
+      ...base,
       documento.folio,
       documento.tipo,
       documento.fecha,

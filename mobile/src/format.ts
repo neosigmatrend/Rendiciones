@@ -94,6 +94,31 @@ export function etiquetaTipo(tipo: TipoDocumento): string {
   return ETIQUETAS_TIPO[tipo]
 }
 
+const PREFIJO_BANCO: Record<TipoDocumento, string> = {
+  factura: "FA",
+  boleta: "BOL",
+  otro: "",
+}
+
+export function folioBanco(documentos: Pick<Documento, "folio" | "tipo">[]): string {
+  const grupos = new Map<TipoDocumento, string[]>()
+  for (const documento of documentos) {
+    const folio = documento.folio.trim()
+    if (!folio) continue
+    const folios = grupos.get(documento.tipo) ?? []
+    if (!folios.includes(folio)) folios.push(folio)
+    grupos.set(documento.tipo, folios)
+  }
+  const partes: string[] = []
+  for (const tipo of ["factura", "boleta", "otro"] as const) {
+    const folios = grupos.get(tipo)
+    if (!folios || folios.length === 0) continue
+    const unidos = folios.join("-")
+    partes.push(PREFIJO_BANCO[tipo] ? `${PREFIJO_BANCO[tipo]} ${unidos}` : unidos)
+  }
+  return partes.join(" ")
+}
+
 export function cuadreDe(monto: number, documentos: Pick<Documento, "folio" | "monto">[]): Cuadre {
   const suma = documentos.reduce((total, documento) => total + documento.monto, 0)
   const conDatos = documentos.some((documento) => documento.folio.trim() || documento.monto > 0)
