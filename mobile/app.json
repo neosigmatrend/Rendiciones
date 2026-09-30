@@ -39,6 +39,12 @@
       ],
       "expo-sharing",
       "@react-native-community/datetimepicker"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "5711799c-07b8-45dd-8b50-c40d15138920"
+      }
+    },
+    "owner": "charlygarciab"
   }
 }
