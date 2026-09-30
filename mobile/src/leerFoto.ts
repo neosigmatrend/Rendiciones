@@ -3,7 +3,7 @@ import { File } from "expo-file-system"
 import { leerTexto, type Lectura } from "./leerDocumento"
 
 const OCR_URL = "https://api.ocr.space/parse/image"
-const OCR_KEY = "helloworld"
+const OCR_KEY = process.env.EXPO_PUBLIC_OCR_KEY ?? ""
 
 export type ResultadoFoto =
   | { ok: true; lectura: Lectura; texto: string }
