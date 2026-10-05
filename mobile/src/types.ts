@@ -7,6 +7,7 @@ export type Foto = {
   nombre: string
   uri: string
   texto?: string
+  apoyo?: boolean
 }
 
 export type Documento = {
@@ -24,6 +25,7 @@ export type Pago = {
   descripcion: string
   monto: number
   tarjeta: string
+  esRendicion: boolean
   fotos: Foto[]
   documentos: Documento[]
   ejemplo: boolean

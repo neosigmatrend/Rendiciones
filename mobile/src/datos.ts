@@ -7,9 +7,9 @@ import { TIPOS_DOCUMENTO } from "./types"
 const CLAVE = "rendiciones.pagos.v1"
 
 function pagoEjemplo(
-  pago: Omit<Pago, "ejemplo" | "fotos" | "creadoEn" | "actualizadoEn"> & { creadoEn: string },
+  pago: Omit<Pago, "ejemplo" | "fotos" | "esRendicion" | "creadoEn" | "actualizadoEn"> & { creadoEn: string },
 ): Pago {
-  return { ...pago, fotos: [], ejemplo: true, actualizadoEn: pago.creadoEn }
+  return { ...pago, esRendicion: true, fotos: [], ejemplo: true, actualizadoEn: pago.creadoEn }
 }
 
 export function semilla(): Pago[] {
@@ -79,7 +79,15 @@ function normalizar(valor: unknown): Pago | null {
         if (!foto || typeof foto !== "object") return []
         const item = foto as Partial<Foto>
         if (typeof item.id !== "string" || typeof item.uri !== "string" || typeof item.nombre !== "string") return []
-        return [{ id: item.id, nombre: item.nombre, uri: item.uri, texto: typeof item.texto === "string" ? item.texto : undefined }]
+        return [
+          {
+            id: item.id,
+            nombre: item.nombre,
+            uri: item.uri,
+            texto: typeof item.texto === "string" ? item.texto : undefined,
+            apoyo: item.apoyo === true ? true : undefined,
+          },
+        ]
       })
     : []
 
@@ -90,6 +98,7 @@ function normalizar(valor: unknown): Pago | null {
     descripcion: typeof pago.descripcion === "string" ? pago.descripcion : "",
     monto: pago.monto,
     tarjeta: pago.tarjeta,
+    esRendicion: pago.esRendicion !== false,
     fotos,
     documentos,
     ejemplo: pago.ejemplo === true,
@@ -134,8 +143,9 @@ export type PagoInput = {
   descripcion: string
   monto: number
   tarjeta: string
+  esRendicion: boolean
   documentos: Omit<Documento, "id">[]
-  fotosNuevas: { uri: string; nombre: string; texto?: string }[]
+  fotosNuevas: { uri: string; nombre: string; texto?: string; apoyo?: boolean }[]
   fotosConservadas: Foto[]
 }
 
@@ -153,12 +163,12 @@ function extensionDe(nombre: string) {
   return "jpg"
 }
 
-export async function copiarCaptura(uri: string, nombre: string, texto?: string): Promise<Foto> {
+export async function copiarCaptura(uri: string, nombre: string, texto?: string, apoyo?: boolean): Promise<Foto> {
   const carpeta = carpetaCapturas()
   const id = Crypto.randomUUID()
   const archivo = new File(carpeta, `${id}.${extensionDe(nombre || uri)}`)
   await new File(uri).copy(archivo)
-  return { id, nombre: nombre || archivo.name, uri: archivo.uri, texto }
+  return { id, nombre: nombre || archivo.name, uri: archivo.uri, texto, apoyo: apoyo ? true : undefined }
 }
 
 function borrarCaptura(uri: string) {
@@ -173,7 +183,7 @@ function borrarCaptura(uri: string) {
 export async function crearPago(input: PagoInput): Promise<Pago> {
   const fotos = []
   for (const captura of input.fotosNuevas) {
-    fotos.push(await copiarCaptura(captura.uri, captura.nombre, captura.texto))
+    fotos.push(await copiarCaptura(captura.uri, captura.nombre, captura.texto, captura.apoyo))
   }
   const ahora = new Date().toISOString()
   const pago: Pago = {
@@ -183,6 +193,7 @@ export async function crearPago(input: PagoInput): Promise<Pago> {
     descripcion: input.descripcion,
     monto: input.monto,
     tarjeta: input.tarjeta,
+    esRendicion: input.esRendicion,
     fotos,
     documentos: input.documentos.map((documento) => ({ ...documento, id: Crypto.randomUUID() })),
     ejemplo: false,
@@ -202,7 +213,7 @@ export async function actualizarPago(id: string, input: PagoInput): Promise<Pago
   actual.fotos.filter((foto) => !conservadas.has(foto.id)).forEach((foto) => borrarCaptura(foto.uri))
   const nuevas = []
   for (const captura of input.fotosNuevas) {
-    nuevas.push(await copiarCaptura(captura.uri, captura.nombre, captura.texto))
+    nuevas.push(await copiarCaptura(captura.uri, captura.nombre, captura.texto, captura.apoyo))
   }
   const actualizado: Pago = {
     ...actual,
@@ -211,6 +222,7 @@ export async function actualizarPago(id: string, input: PagoInput): Promise<Pago
     descripcion: input.descripcion,
     monto: input.monto,
     tarjeta: input.tarjeta,
+    esRendicion: input.esRendicion,
     documentos: input.documentos.map((documento) => ({ ...documento, id: Crypto.randomUUID() })),
     fotos: [...input.fotosConservadas, ...nuevas],
     ejemplo: false,

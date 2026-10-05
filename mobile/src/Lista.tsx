@@ -3,17 +3,24 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import * as Sharing from "expo-sharing"
 import { File, Paths } from "expo-file-system"
 import { usePagos } from "./contexto"
+import type { ModoNuevo } from "./Formulario"
 import { cuadreDe, etiquetaCuadre, etiquetaMes, etiquetaTipo, folioBanco, formatCLP, formatFecha, mesDeFecha } from "./format"
 import type { Pago } from "./types"
 import { Boton, colores } from "./ui"
 
-export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onNuevo: () => void }) {
+type FiltroTipo = "todos" | "rendicion" | "no"
+
+export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onNuevo: (modo: ModoNuevo) => void }) {
   const { pagos, cargando, error } = usePagos()
   const meses = [...new Set(pagos.map((pago) => mesDeFecha(pago.fecha)))].sort().reverse()
   const [mes, setMes] = useState<string | null>(null)
-  const visibles = mes ? pagos.filter((pago) => mesDeFecha(pago.fecha) === mes) : pagos
-  const total = visibles.reduce((suma, pago) => suma + pago.monto, 0)
-  const conDocumentos = visibles.filter((pago) => pago.documentos.length > 0).length
+  const [tipo, setTipo] = useState<FiltroTipo>("todos")
+  const delMes = mes ? pagos.filter((pago) => mesDeFecha(pago.fecha) === mes) : pagos
+  const visibles = delMes.filter((pago) => tipo === "todos" || (tipo === "rendicion") === pago.esRendicion)
+  const total = delMes.reduce((suma, pago) => suma + pago.monto, 0)
+  const rendiciones = delMes.filter((pago) => pago.esRendicion)
+  const conDocumentos = rendiciones.filter((pago) => pago.documentos.length > 0).length
+  const sinRendicion = delMes.length - rendiciones.length
 
   if (cargando) {
     return (
@@ -36,20 +43,32 @@ export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onN
   return (
     <ScrollView contentContainerStyle={estilos.contenido}>
       <Text style={estilos.marca}>Rendiciones</Text>
-      <Text style={estilos.version}>versión 18</Text>
+      <Text style={estilos.version}>versión 19</Text>
       <Text style={estilos.subtitulo}>Pagos con tarjeta</Text>
       <View style={estilos.resumen}>
-        <Resumen etiqueta="Pagos" valor={String(visibles.length)} />
-        <Resumen etiqueta="En tarjeta" valor={formatCLP(total)} />
-        <Resumen etiqueta="Con folio" valor={`${conDocumentos}/${visibles.length}`} />
+        <Resumen etiqueta="En tarjeta" valor={formatCLP(total)} ancho={2} />
+        <Resumen etiqueta="Con folio" valor={`${conDocumentos}/${rendiciones.length}`} />
+        <Resumen etiqueta="No rend." valor={String(sinRendicion)} />
       </View>
-      <Boton titulo="Capturar pago" onPress={onNuevo} />
+      <View style={estilos.fila}>
+        <View style={estilos.flex}>
+          <Boton titulo="+ Rendición" onPress={() => onNuevo("rendicion")} />
+        </View>
+        <View style={estilos.flex}>
+          <Boton titulo="+ Sin rendición" variante="secundario" onPress={() => onNuevo("sin_rendicion")} />
+        </View>
+      </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={estilos.meses}>
         <Filtro titulo="Todos" activo={mes === null} onPress={() => setMes(null)} />
         {meses.map((item) => (
           <Filtro key={item} titulo={etiquetaMes(item)} activo={mes === item} onPress={() => setMes(item)} />
         ))}
       </ScrollView>
+      <View style={estilos.fila}>
+        <Filtro titulo="Todas" activo={tipo === "todos"} onPress={() => setTipo("todos")} igual />
+        <Filtro titulo="Rendiciones" activo={tipo === "rendicion"} onPress={() => setTipo("rendicion")} igual />
+        <Filtro titulo="No rendición" activo={tipo === "no"} onPress={() => setTipo("no")} igual />
+      </View>
       <Boton titulo="Exportar rendición" variante="secundario" onPress={() => exportar(visibles, mes)} />
       {visibles.length === 0 ? (
         <View style={estilos.vacio}>
@@ -61,7 +80,19 @@ export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onN
       ) : (
         visibles.map((pago) => {
           return (
-            <Pressable key={pago.id} onPress={() => onAbrir(pago.id)} style={estilos.pago}>
+            <Pressable
+              key={pago.id}
+              onPress={() => onAbrir(pago.id)}
+              style={[estilos.pago, { borderLeftColor: pago.esRendicion ? colores.primario : colores.sinRendicion }]}
+            >
+              <View style={estilos.etiquetas}>
+                <Text style={[estilos.etiqueta, pago.esRendicion ? estilos.etiquetaRendicion : estilos.etiquetaNo]}>
+                  {pago.esRendicion ? "RENDICIÓN" : "NO RENDICIÓN"}
+                </Text>
+                {pago.esRendicion && pago.documentos.length === 0 ? (
+                  <Text style={[estilos.etiqueta, estilos.etiquetaFalta]}>FALTA FOLIO</Text>
+                ) : null}
+              </View>
               <View style={estilos.pagoCabeza}>
                 <View style={estilos.flex}>
                   <Text style={estilos.fecha}>{formatFecha(pago.fecha)}</Text>
@@ -75,7 +106,9 @@ export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onN
                 <Text style={estilos.monto}>{formatCLP(pago.monto)}</Text>
               </View>
               <Text style={estilos.lineas}>
-                {pago.documentos.length === 0
+                {!pago.esRendicion
+                  ? "No requiere folio"
+                  : pago.documentos.length === 0
                   ? "Sin folios todavía"
                   : pago.documentos
                       .map((documento) => `${etiquetaTipo(documento.tipo)} ${documento.folio || "sin folio"} · ${formatCLP(documento.monto)}`)
@@ -93,19 +126,23 @@ export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onN
   )
 }
 
-function Resumen({ etiqueta, valor }: { etiqueta: string; valor: string }) {
+function Resumen({ etiqueta, valor, ancho = 1 }: { etiqueta: string; valor: string; ancho?: number }) {
   return (
-    <View style={estilos.resumenItem}>
+    <View style={[estilos.resumenItem, { flex: ancho }]}>
       <Text style={estilos.resumenEtiqueta}>{etiqueta}</Text>
-      <Text style={estilos.resumenValor}>{valor}</Text>
+      <Text style={estilos.resumenValor} numberOfLines={1} adjustsFontSizeToFit>
+        {valor}
+      </Text>
     </View>
   )
 }
 
-function Filtro({ titulo, activo, onPress }: { titulo: string; activo: boolean; onPress: () => void }) {
+function Filtro({ titulo, activo, onPress, igual }: { titulo: string; activo: boolean; onPress: () => void; igual?: boolean }) {
   return (
-    <Pressable onPress={onPress} style={[estilos.filtro, activo && estilos.filtroActivo]}>
-      <Text style={[estilos.filtroTexto, activo && estilos.filtroTextoActivo]}>{titulo}</Text>
+    <Pressable onPress={onPress} style={[estilos.filtro, igual && estilos.filtroIgual, activo && estilos.filtroActivo]}>
+      <Text style={[estilos.filtroTexto, activo && estilos.filtroTextoActivo]} numberOfLines={1}>
+        {titulo}
+      </Text>
     </Pressable>
   )
 }
@@ -116,40 +153,51 @@ function celda(valor: string | number) {
   return texto
 }
 
+function fechaBanco(iso: string) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : iso
+}
+
 async function exportar(pagos: Pago[], mes: string | null) {
   const encabezado = [
+    "FECHA",
+    "DESCRIPCION",
+    "TITULAR/ADICIONAL",
+    "MONTO",
+    "CUOTAS PENDIENTES",
+    "VALOR CUOTA",
+    "CATEGORIA",
+    "FOLIO",
+    "OBS",
+    "ESTADO",
     "pago_id",
-    "fecha",
-    "proveedor",
-    "descripcion",
     "tarjeta",
-    "monto_pago",
-    "folio_banco",
-    "folio",
-    "tipo",
-    "fecha_documento",
-    "monto_documento",
-    "estado",
+    "descripcion_app",
+    "estado_cuadre",
+    "monto_documentos",
     "ejemplo",
   ]
-  const filas = pagos.flatMap((pago) => {
+  const filas = pagos.map((pago) => {
     const cuadre = cuadreDe(pago.monto, pago.documentos)
-    const estado = etiquetaCuadre(cuadre)
-    const ejemplo = pago.ejemplo ? "si" : "no"
-    const folio = folioBanco(pago.documentos)
-    const base = [pago.id, pago.fecha, pago.proveedor, pago.descripcion, pago.tarjeta, pago.monto, folio]
-    if (pago.documentos.length === 0) {
-      return [[...base, "", "", "", "", estado, ejemplo]]
-    }
-    return pago.documentos.map((documento) => [
-      ...base,
-      documento.folio,
-      documento.tipo,
-      documento.fecha,
-      documento.monto,
-      estado,
-      ejemplo,
-    ])
+    const proveedor = pago.proveedor.trim()
+    return [
+      fechaBanco(pago.fecha),
+      `COMPRA ${proveedor}`.trim().toUpperCase(),
+      "Titular",
+      pago.monto,
+      0,
+      pago.monto,
+      pago.esRendicion ? "RENDICION" : "NO",
+      pago.esRendicion ? folioBanco(pago.documentos) : "",
+      proveedor.toUpperCase(),
+      "",
+      pago.id,
+      pago.tarjeta,
+      pago.descripcion,
+      pago.esRendicion ? etiquetaCuadre(cuadre) : "No rendición",
+      pago.esRendicion ? cuadre.suma : "",
+      pago.ejemplo ? "si" : "no",
+    ]
   })
   const csv = `\uFEFF${[encabezado, ...filas].map((fila) => fila.map(celda).join(";")).join("\n")}\n`
   const nombre = mes ? `rendicion-${mes}.csv` : "rendicion.csv"
@@ -174,12 +222,19 @@ const estilos = StyleSheet.create({
   resumenEtiqueta: { color: colores.muted, fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
   resumenValor: { color: colores.tinta, fontSize: 16, fontWeight: "700", marginTop: 4 },
   meses: { gap: 8 },
+  fila: { flexDirection: "row", gap: 8 },
+  filtroIgual: { alignItems: "center", flex: 1, paddingHorizontal: 6 },
   filtro: { backgroundColor: colores.tarjeta, borderColor: colores.borde, borderRadius: 999, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
   filtroActivo: { backgroundColor: colores.primario, borderColor: colores.primario },
   filtroTexto: { color: colores.tinta, fontSize: 14, fontWeight: "600" },
   filtroTextoActivo: { color: colores.primarioTexto },
   vacio: { gap: 8, paddingVertical: 12 },
-  pago: { backgroundColor: colores.tarjeta, borderRadius: 16, gap: 8, padding: 14 },
+  pago: { backgroundColor: colores.tarjeta, borderLeftWidth: 6, borderRadius: 16, gap: 8, padding: 14 },
+  etiquetas: { flexDirection: "row", gap: 6 },
+  etiqueta: { borderRadius: 999, fontSize: 11, fontWeight: "700", overflow: "hidden", paddingHorizontal: 8, paddingVertical: 3 },
+  etiquetaRendicion: { backgroundColor: colores.cuadraFondo, color: colores.cuadraTexto },
+  etiquetaNo: { backgroundColor: colores.vacioFondo, color: colores.vacioTexto },
+  etiquetaFalta: { backgroundColor: colores.faltaFondo, color: colores.faltaTexto },
   pagoCabeza: { flexDirection: "row", gap: 12, justifyContent: "space-between" },
   flex: { flex: 1 },
   fecha: { color: colores.muted, fontSize: 13 },

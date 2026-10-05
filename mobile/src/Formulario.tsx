@@ -42,7 +42,9 @@ type Borrador = {
   tipo: TipoDocumento
 }
 
-type CapturaNueva = { key: string; uri: string; nombre: string; ancho?: number; esPdf?: boolean }
+type CapturaNueva = { key: string; uri: string; nombre: string; ancho?: number; esPdf?: boolean; apoyo?: boolean }
+
+export type ModoNuevo = "rendicion" | "sin_rendicion"
 
 type Paso = "capturar" | "leyendo" | "confirmar"
 
@@ -71,8 +73,13 @@ function mensajeLecturaFallida(motivos: Array<"sin_datos" | "sin_red" | "servici
 function mensajeLectura(lectura: Lectura): string {
   if (lectura.documentos.length === 1) return "Leí 1 folio con su monto. Confírmalo."
   if (lectura.documentos.length > 1) return `Leí ${lectura.documentos.length} folios con sus montos. Confírmalos.`
-  if (lectura.monto == null) return "No encontré el monto en la captura."
-  return "Leí el monto. Esta captura no trae folios."
+  if (lectura.monto == null) return "No encontré el monto en la captura. Puedes escribirlo y agregar el folio abajo."
+  return "Leí el monto. Esta captura no trae folios: usa «Agregar folio» para escribirlo."
+}
+
+function sumarDocumentos(actuales: Borrador[], nuevos: Borrador[]): Borrador[] {
+  const folios = new Set(actuales.map((documento) => documento.folio.trim()).filter(Boolean))
+  return [...actuales, ...nuevos.filter((documento) => !documento.folio.trim() || !folios.has(documento.folio.trim()))]
 }
 
 function borradoresIniciales(pago?: Pago): Borrador[] {
@@ -88,17 +95,21 @@ function borradoresIniciales(pago?: Pago): Borrador[] {
 
 export function Formulario({
   pago,
+  modo = "rendicion",
   tarjetas,
   onCancelar,
   onGuardado,
 }: {
   pago?: Pago
+  modo?: ModoNuevo
   tarjetas: string[]
   onCancelar: () => void
   onGuardado: (id: string) => void
 }) {
   const { guardar } = usePagos()
-  const [paso, setPaso] = useState<Paso>(pago ? "confirmar" : "capturar")
+  const sinLectura = !pago && modo === "sin_rendicion"
+  const [esRendicion, setEsRendicion] = useState(pago ? pago.esRendicion : modo === "rendicion")
+  const [paso, setPaso] = useState<Paso>(pago || sinLectura ? "confirmar" : "capturar")
   const [fecha, setFecha] = useState(pago?.fecha ?? hoyIso())
   const [mostrarFecha, setMostrarFecha] = useState(false)
   const [proveedor, setProveedor] = useState(pago?.proveedor ?? "")
@@ -110,13 +121,13 @@ export function Formulario({
   const [fotosGuardadas, setFotosGuardadas] = useState<Foto[]>(pago?.fotos ?? [])
   const [fotosNuevas, setFotosNuevas] = useState<CapturaNueva[]>([])
   const [guardando, setGuardando] = useState(false)
-  const [corrigiendo, setCorrigiendo] = useState(false)
+  const [corrigiendo, setCorrigiendo] = useState(sinLectura)
   const [avisoLectura, setAvisoLectura] = useState<string | null>(null)
   const [lecturaFallida, setLecturaFallida] = useState(false)
   const [montosCandidatos, setMontosCandidatos] = useState<MontoCandidato[]>([])
   const [foliosCandidatos, setFoliosCandidatos] = useState<DocumentoLeido[]>([])
   const [folioActivo, setFolioActivo] = useState<string | null>(null)
-  const [montoManual, setMontoManual] = useState(Boolean(pago))
+  const [montoManual, setMontoManual] = useState(Boolean(pago) || sinLectura)
   const [textosLeidos, setTextosLeidos] = useState<Map<string, string>>(new Map())
   const [verTexto, setVerTexto] = useState(false)
   const camaraAbierta = useRef(false)
@@ -125,21 +136,31 @@ export function Formulario({
     setDocumentos((actuales) => actuales.map((item) => (item.key === key ? { ...item, ...cambios } : item)))
   }
 
-  function aplicarLectura(lectura: Lectura) {
-    if (lectura.proveedor) setProveedor(lectura.proveedor)
-    if (lectura.fecha) setFecha(lectura.fecha)
-    if (lectura.descripcion) setDescripcion(lectura.descripcion)
-    if (lectura.monto != null) setMonto(formatMontoInput(lectura.monto))
-    setDocumentos(lectura.documentos.map((documento, indice) => borradorLeido(documento, indice)))
-    setMontosCandidatos(lectura.montosCandidatos)
-    setFoliosCandidatos(lectura.foliosCandidatos)
-    setMontoManual(lectura.documentos.length === 0)
+  function aplicarLectura(lectura: Lectura, adicional: boolean) {
+    if (lectura.proveedor && (!adicional || !proveedor.trim())) setProveedor(lectura.proveedor)
+    if (lectura.fecha && !adicional) setFecha(lectura.fecha)
+    if (lectura.descripcion && (!adicional || !descripcion.trim())) setDescripcion(lectura.descripcion)
+    if (lectura.monto != null && (!adicional || !monto.trim())) setMonto(formatMontoInput(lectura.monto))
+    const nuevos = lectura.documentos.map((documento, indice) => borradorLeido(documento, indice))
+    const unidos = adicional ? sumarDocumentos(documentos, nuevos) : nuevos
+    setDocumentos(unidos)
+    setMontosCandidatos((actuales) =>
+      adicional
+        ? [...actuales, ...lectura.montosCandidatos.filter((c) => !actuales.some((a) => a.valor === c.valor && a.etiqueta === c.etiqueta))]
+        : lectura.montosCandidatos,
+    )
+    setFoliosCandidatos((actuales) =>
+      adicional
+        ? [...actuales, ...lectura.foliosCandidatos.filter((c) => !actuales.some((a) => a.folio === c.folio))]
+        : lectura.foliosCandidatos,
+    )
+    setMontoManual(adicional ? montoManual || unidos.length === 0 : unidos.length === 0)
     setCorrigiendo(false)
     setLecturaFallida(lectura.monto == null && lectura.documentos.length === 0)
     setAvisoLectura(mensajeLectura(lectura))
   }
 
-  async function elegirCapturas(origen: "galeria" | "camara") {
+  async function elegirCapturas(origen: "galeria" | "camara", apoyo = false) {
     const permiso =
       origen === "camara"
         ? await ImagePicker.requestCameraPermissionsAsync()
@@ -174,6 +195,10 @@ export function Formulario({
       nombre: asset.fileName ?? "captura.jpg",
       ancho: asset.width,
     }))
+    if (apoyo) {
+      setFotosNuevas((actuales) => [...actuales, ...siguientes.map((captura) => ({ ...captura, apoyo: true }))].slice(0, 8))
+      return
+    }
     await leerCapturas(siguientes)
   }
 
@@ -199,6 +224,7 @@ export function Formulario({
   }
 
   async function leerCapturas(siguientes: CapturaNueva[]) {
+    const adicional = fotosNuevas.some((foto) => !foto.apoyo) || fotosGuardadas.some((foto) => !foto.apoyo)
     setFotosNuevas((actuales) => [...actuales, ...siguientes].slice(0, 8))
     setPaso("leyendo")
     setLecturaFallida(false)
@@ -222,7 +248,7 @@ export function Formulario({
         setCorrigiendo(true)
         setAvisoLectura(mensajeLecturaFallida(motivos))
       } else {
-        aplicarLectura(combinarLecturas(lecturas))
+        aplicarLectura(combinarLecturas(lecturas), adicional)
       }
     } catch {
       setLecturaFallida(true)
@@ -259,10 +285,10 @@ export function Formulario({
   }
 
   useEffect(() => {
-    if (pago || camaraAbierta.current) return
+    if (pago || modo !== "rendicion" || camaraAbierta.current) return
     camaraAbierta.current = true
     void elegirCapturas("camara")
-  }, [pago])
+  }, [pago, modo])
 
   async function onGuardar() {
     const montoNumero = montoEfectivo
@@ -272,7 +298,7 @@ export function Formulario({
     }
     if (montoNumero <= 0) {
       setCorrigiendo(true)
-      Alert.alert("Falta el total", "Empareja un folio con su monto o escribe el total.")
+      Alert.alert("Falta el total", esRendicion ? "Empareja un folio con su monto o escribe el total." : "Escribe el total de la compra.")
       return
     }
     if (!tarjeta.trim()) {
@@ -308,11 +334,13 @@ export function Formulario({
         descripcion: descripcion.trim(),
         monto: montoNumero,
         tarjeta: tarjeta.trim(),
-        documentos: documentosLimpios,
+        esRendicion,
+        documentos: esRendicion ? documentosLimpios : [],
         fotosNuevas: fotosNuevas.map((foto) => ({
           uri: foto.uri,
           nombre: foto.nombre,
           texto: textosLeidos.get(foto.key),
+          apoyo: foto.apoyo,
         })),
         fotosConservadas: fotosGuardadas,
       })
@@ -333,7 +361,8 @@ export function Formulario({
     (candidato) => !documentos.some((documento) => documento.folio === candidato.folio),
   )
   const sumaDocumentos = documentosParaCuadre.reduce((total, documento) => total + documento.monto, 0)
-  const montoEfectivo = !montoManual && sumaDocumentos > 0 ? sumaDocumentos : parseCLP(monto) ?? 0
+  const montoEfectivo = esRendicion && !montoManual && sumaDocumentos > 0 ? sumaDocumentos : parseCLP(monto) ?? 0
+  const apoyos = fotosGuardadas.filter((foto) => foto.apoyo).length + fotosNuevas.filter((foto) => foto.apoyo).length
   const puedeConfirmar = montoEfectivo > 0
   const capturaPrincipal = fotosNuevas[fotosNuevas.length - 1]
   const fotoPrincipal = capturaPrincipal?.uri ?? fotosGuardadas[0]?.uri
@@ -345,7 +374,7 @@ export function Formulario({
     return (
       <ScrollView contentContainerStyle={estilos.contenido}>
         <Text style={estilos.titulo}>Capturar pago</Text>
-        <Text style={estilos.version}>versión 18</Text>
+        <Text style={estilos.version}>versión 19</Text>
         <Text style={estilos.ayuda}>
           Fotografía la boleta o la pantalla del pago. La app lee el monto y los folios, comprueba que sumen el cargo y te pide confirmar.
         </Text>
@@ -372,12 +401,22 @@ export function Formulario({
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={estilos.flex}>
       <ScrollView contentContainerStyle={estilos.contenido} keyboardShouldPersistTaps="handled">
         <Text style={estilos.titulo}>{pago ? "Revisar pago" : "Confirmar pago"}</Text>
-        <Text style={estilos.version}>versión 18</Text>
+        <Text style={estilos.version}>versión 19</Text>
         <Text style={estilos.ayuda}>
-          {puedeConfirmar
-            ? "Esto es lo que leí en la captura. Si está bien, confirma."
-            : "Falta el total. Empareja un folio con su monto o escríbelo abajo."}
+          {!esRendicion
+            ? "Compra sin rendición: no necesita folio. Escribe los datos y, si quieres, suma una imagen de apoyo."
+            : puedeConfirmar
+              ? "Esto es lo que leí en la captura. Si está bien, confirma."
+              : "Falta el total. Empareja un folio con su monto o escríbelo abajo."}
         </Text>
+        <View style={estilos.chips}>
+          <Pressable onPress={() => setEsRendicion(true)} style={[estilos.chip, esRendicion && estilos.chipActivo]}>
+            <Text style={[estilos.chipTexto, esRendicion && estilos.chipTextoActivo]}>Rendición</Text>
+          </Pressable>
+          <Pressable onPress={() => setEsRendicion(false)} style={[estilos.chip, !esRendicion && estilos.chipActivo]}>
+            <Text style={[estilos.chipTexto, !esRendicion && estilos.chipTextoActivo]}>No es rendición</Text>
+          </Pressable>
+        </View>
         {avisoLectura ? <Text style={[estilos.aviso, lecturaFallida && estilos.avisoError]}>{avisoLectura}</Text> : null}
         <Vista uri={fotoPrincipal} nombre={nombrePrincipal} esPdf={pdfPrincipal} />
 
@@ -419,10 +458,14 @@ export function Formulario({
           </DatoLeido>
         ) : null}
 
+        {esRendicion ? (
+          <>
         <Text style={estilos.seccion}>Documentos</Text>
         {documentos.length === 0 ? (
           <Text style={estilos.ayuda}>
-            {foliosCandidatos.length > 0 ? "Todavía no has emparejado ningún folio." : "Esta captura no trae folios."}
+            {foliosCandidatos.length > 0
+              ? "Todavía no has emparejado ningún folio."
+              : "Sin folios todavía. Usa «Agregar folio» para escribirlo."}
           </Text>
         ) : null}
         {documentos.map((documento) => (
@@ -548,21 +591,22 @@ export function Formulario({
             </View>
           ) : null,
         )}
-        {corrigiendo ? (
-          <Boton
-            titulo="Agregar folio"
-            variante="secundario"
-            onPress={() =>
-              setDocumentos((actuales) => [
-                ...actuales,
-                { key: `${Date.now()}`, folio: "", fecha: "", monto: "", tipo: "factura" },
-              ])
-            }
-          />
-        ) : null}
+        <Boton
+          titulo="Agregar folio"
+          variante="secundario"
+          onPress={() => {
+            setCorrigiendo(true)
+            setDocumentos((actuales) => [
+              ...actuales,
+              { key: `${Date.now()}`, folio: "", fecha: "", monto: "", tipo: "factura" },
+            ])
+          }}
+        />
 
         <PanelTotal monto={montoEfectivo} documentos={documentosParaCuadre} />
-        {documentos.length === 0 || corrigiendo ? (
+          </>
+        ) : null}
+        {!esRendicion || documentos.length === 0 || corrigiendo ? (
           <Campo etiqueta="Total del cargo">
             <TextInput
               value={monto}
@@ -628,11 +672,18 @@ export function Formulario({
             ) : null}
           </>
         ) : null}
+        {apoyos > 0 ? <Text style={estilos.ayuda}>{apoyos === 1 ? "1 imagen de apoyo adjunta." : `${apoyos} imágenes de apoyo adjuntas.`}</Text> : null}
+        {esRendicion ? (
+          <View style={estilos.acciones}>
+            <Boton titulo="Otra captura (leer folio)" variante="secundario" onPress={() => elegirCapturas("galeria")} disabled={guardando} />
+            <Boton titulo="Tomar otra foto (leer folio)" variante="secundario" onPress={() => elegirCapturas("camara")} disabled={guardando} />
+            <Boton titulo="Sumar archivo o PDF (leer folio)" variante="secundario" onPress={() => void elegirArchivos()} disabled={guardando} />
+          </View>
+        ) : null}
         <View style={estilos.acciones}>
-          <Boton titulo="Otra captura" variante="secundario" onPress={() => elegirCapturas("galeria")} disabled={guardando} />
-          <Boton titulo="Tomar otra foto" variante="secundario" onPress={() => elegirCapturas("camara")} disabled={guardando} />
+          <Boton titulo="Foto de apoyo (sin leer)" variante="secundario" onPress={() => elegirCapturas("camara", true)} disabled={guardando} />
+          <Boton titulo="Imagen de apoyo (galería)" variante="secundario" onPress={() => elegirCapturas("galeria", true)} disabled={guardando} />
         </View>
-        <Boton titulo="Sumar archivo o PDF" variante="secundario" onPress={() => void elegirArchivos()} disabled={guardando} />
         <Boton
           titulo={guardando ? "Guardando…" : pago ? "Guardar cambios" : "Confirmar pago"}
           onPress={() => void onGuardar()}

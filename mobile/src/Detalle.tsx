@@ -54,9 +54,10 @@ export function Detalle({
       <Text style={estilos.titulo}>{pago.proveedor.trim() || "Sin proveedor"}</Text>
       <Text style={estilos.ayuda}>{[pago.descripcion, pago.tarjeta].filter(Boolean).join(" · ")}</Text>
       {pago.ejemplo ? <Text style={estilos.ejemplo}>Ejemplo</Text> : null}
-      <PanelTotal monto={pago.monto} documentos={pago.documentos} />
+      <Text style={estilos.ejemplo}>{pago.esRendicion ? "Rendición" : "No es rendición"}</Text>
+      {pago.esRendicion ? <PanelTotal monto={pago.monto} documentos={pago.documentos} /> : <Text style={estilos.folioCartola}>{formatCLP(pago.monto)}</Text>}
 
-      {folioCartola ? (
+      {pago.esRendicion && folioCartola ? (
         <View style={estilos.cartola}>
           <Text style={estilos.etiqueta}>Folio para la cartola</Text>
           <Text selectable style={estilos.folioCartola}>
@@ -76,6 +77,7 @@ export function Detalle({
                 <Text style={estilos.folio} numberOfLines={3}>
                   {foto.nombre}
                 </Text>
+                {foto.apoyo ? <Text style={estilos.ayuda}>Apoyo</Text> : null}
               </View>
             ) : (
               <Pressable key={foto.id} onPress={() => setFotoAbierta(foto.uri)}>
@@ -86,8 +88,8 @@ export function Detalle({
         </ScrollView>
       )}
 
-      <Text style={estilos.seccion}>Documentos</Text>
-      {pago.documentos.length === 0 ? (
+      {pago.esRendicion ? <Text style={estilos.seccion}>Documentos</Text> : null}
+      {!pago.esRendicion ? null : pago.documentos.length === 0 ? (
         <Text style={estilos.vacio}>Este pago no tiene facturas ni boletas asociadas.</Text>
       ) : (
         pago.documentos.map((documento) => (
