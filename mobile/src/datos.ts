@@ -83,7 +83,7 @@ function normalizar(valor: unknown): Pago | null {
           {
             id: item.id,
             nombre: item.nombre,
-            uri: item.uri,
+            uri: uriActual(item.uri),
             texto: typeof item.texto === "string" ? item.texto : undefined,
             apoyo: item.apoyo === true ? true : undefined,
           },
@@ -161,6 +161,17 @@ function extensionDe(nombre: string) {
   if (extension === "jpeg") return "jpg"
   if (extension && ["jpg", "png", "webp", "gif", "heic", "pdf"].includes(extension)) return extension
   return "jpg"
+}
+
+// iOS cambia la ruta de la app al actualizarla: se reconstruye desde el nombre del archivo.
+function uriActual(uri: string): string {
+  const nombre = uri.split("/").pop()
+  if (!uri.includes("/capturas/") || !nombre) return uri
+  try {
+    return new File(new Directory(Paths.document, "capturas"), nombre).uri
+  } catch {
+    return uri
+  }
 }
 
 export async function copiarCaptura(uri: string, nombre: string, texto?: string, apoyo?: boolean): Promise<Foto> {
