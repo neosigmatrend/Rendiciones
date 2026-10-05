@@ -4,13 +4,13 @@ import { StatusBar } from "expo-status-bar"
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context"
 import { PagosProvider, usePagos } from "./src/contexto"
 import { Detalle } from "./src/Detalle"
-import { Formulario } from "./src/Formulario"
+import { Formulario, type ModoNuevo } from "./src/Formulario"
 import { Lista } from "./src/Lista"
 import { colores } from "./src/ui"
 
 type Pantalla =
   | { nombre: "lista" }
-  | { nombre: "nuevo" }
+  | { nombre: "nuevo"; modo: ModoNuevo }
   | { nombre: "detalle"; id: string }
   | { nombre: "editar"; id: string }
 
@@ -45,9 +45,14 @@ function Navegacion() {
 
   return (
     <SafeAreaView style={estilos.pantalla} edges={["top", "left", "right"]}>
-      {actual.nombre === "lista" ? <Lista onAbrir={(id) => ir({ nombre: "detalle", id })} onNuevo={() => ir({ nombre: "nuevo" })} /> : null}
+      {actual.nombre === "lista" ? <Lista onAbrir={(id) => ir({ nombre: "detalle", id })} onNuevo={(modo) => ir({ nombre: "nuevo", modo })} /> : null}
       {actual.nombre === "nuevo" ? (
-        <Formulario tarjetas={tarjetas} onCancelar={volver} onGuardado={(id) => reemplazar({ nombre: "detalle", id })} />
+        <Formulario
+          modo={actual.modo}
+          tarjetas={tarjetas}
+          onCancelar={volver}
+          onGuardado={(id) => reemplazar({ nombre: "detalle", id })}
+        />
       ) : null}
       {actual.nombre === "detalle" ? (
         <Detalle

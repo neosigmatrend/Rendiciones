@@ -3,17 +3,24 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import * as Sharing from "expo-sharing"
 import { File, Paths } from "expo-file-system"
 import { usePagos } from "./contexto"
+import type { ModoNuevo } from "./Formulario"
 import { cuadreDe, etiquetaCuadre, etiquetaMes, etiquetaTipo, folioBanco, formatCLP, formatFecha, mesDeFecha } from "./format"
 import type { Pago } from "./types"
 import { Boton, colores } from "./ui"
 
-export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onNuevo: () => void }) {
+type FiltroTipo = "todos" | "rendicion" | "no"
+
+export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onNuevo: (modo: ModoNuevo) => void }) {
   const { pagos, cargando, error } = usePagos()
   const meses = [...new Set(pagos.map((pago) => mesDeFecha(pago.fecha)))].sort().reverse()
   const [mes, setMes] = useState<string | null>(null)
-  const visibles = mes ? pagos.filter((pago) => mesDeFecha(pago.fecha) === mes) : pagos
-  const total = visibles.reduce((suma, pago) => suma + pago.monto, 0)
-  const conDocumentos = visibles.filter((pago) => pago.documentos.length > 0).length
+  const [tipo, setTipo] = useState<FiltroTipo>("todos")
+  const delMes = mes ? pagos.filter((pago) => mesDeFecha(pago.fecha) === mes) : pagos
+  const visibles = delMes.filter((pago) => tipo === "todos" || (tipo === "rendicion") === pago.esRendicion)
+  const total = delMes.reduce((suma, pago) => suma + pago.monto, 0)
+  const rendiciones = delMes.filter((pago) => pago.esRendicion)
+  const conDocumentos = rendiciones.filter((pago) => pago.documentos.length > 0).length
+  const sinRendicion = delMes.length - rendiciones.length
 
   if (cargando) {
     return (
@@ -36,20 +43,27 @@ export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onN
   return (
     <ScrollView contentContainerStyle={estilos.contenido}>
       <Text style={estilos.marca}>Rendiciones</Text>
-      <Text style={estilos.version}>versión 18</Text>
+      <Text style={estilos.version}>versión 19</Text>
       <Text style={estilos.subtitulo}>Pagos con tarjeta</Text>
       <View style={estilos.resumen}>
-        <Resumen etiqueta="Pagos" valor={String(visibles.length)} />
+        <Resumen etiqueta="Pagos" valor={String(delMes.length)} />
         <Resumen etiqueta="En tarjeta" valor={formatCLP(total)} />
-        <Resumen etiqueta="Con folio" valor={`${conDocumentos}/${visibles.length}`} />
+        <Resumen etiqueta="Con folio" valor={`${conDocumentos}/${rendiciones.length}`} />
+        <Resumen etiqueta="No rend." valor={String(sinRendicion)} />
       </View>
-      <Boton titulo="Capturar pago" onPress={onNuevo} />
+      <Boton titulo="Capturar rendición" onPress={() => onNuevo("rendicion")} />
+      <Boton titulo="Compra sin rendición" variante="secundario" onPress={() => onNuevo("sin_rendicion")} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={estilos.meses}>
         <Filtro titulo="Todos" activo={mes === null} onPress={() => setMes(null)} />
         {meses.map((item) => (
           <Filtro key={item} titulo={etiquetaMes(item)} activo={mes === item} onPress={() => setMes(item)} />
         ))}
       </ScrollView>
+      <View style={estilos.meses}>
+        <Filtro titulo="Todas" activo={tipo === "todos"} onPress={() => setTipo("todos")} />
+        <Filtro titulo="Rendiciones" activo={tipo === "rendicion"} onPress={() => setTipo("rendicion")} />
+        <Filtro titulo="No rendición" activo={tipo === "no"} onPress={() => setTipo("no")} />
+      </View>
       <Boton titulo="Exportar rendición" variante="secundario" onPress={() => exportar(visibles, mes)} />
       {visibles.length === 0 ? (
         <View style={estilos.vacio}>
@@ -61,7 +75,19 @@ export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onN
       ) : (
         visibles.map((pago) => {
           return (
-            <Pressable key={pago.id} onPress={() => onAbrir(pago.id)} style={estilos.pago}>
+            <Pressable
+              key={pago.id}
+              onPress={() => onAbrir(pago.id)}
+              style={[estilos.pago, { borderLeftColor: pago.esRendicion ? colores.primario : colores.sinRendicion }]}
+            >
+              <View style={estilos.etiquetas}>
+                <Text style={[estilos.etiqueta, pago.esRendicion ? estilos.etiquetaRendicion : estilos.etiquetaNo]}>
+                  {pago.esRendicion ? "RENDICIÓN" : "NO RENDICIÓN"}
+                </Text>
+                {pago.esRendicion && pago.documentos.length === 0 ? (
+                  <Text style={[estilos.etiqueta, estilos.etiquetaFalta]}>FALTA FOLIO</Text>
+                ) : null}
+              </View>
               <View style={estilos.pagoCabeza}>
                 <View style={estilos.flex}>
                   <Text style={estilos.fecha}>{formatFecha(pago.fecha)}</Text>
@@ -75,7 +101,9 @@ export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onN
                 <Text style={estilos.monto}>{formatCLP(pago.monto)}</Text>
               </View>
               <Text style={estilos.lineas}>
-                {pago.documentos.length === 0
+                {!pago.esRendicion
+                  ? "No requiere folio"
+                  : pago.documentos.length === 0
                   ? "Sin folios todavía"
                   : pago.documentos
                       .map((documento) => `${etiquetaTipo(documento.tipo)} ${documento.folio || "sin folio"} · ${formatCLP(documento.monto)}`)
@@ -131,15 +159,17 @@ async function exportar(pagos: Pago[], mes: string | null) {
     "monto_documento",
     "estado",
     "ejemplo",
+    "categoria",
   ]
   const filas = pagos.flatMap((pago) => {
     const cuadre = cuadreDe(pago.monto, pago.documentos)
-    const estado = etiquetaCuadre(cuadre)
+    const estado = pago.esRendicion ? etiquetaCuadre(cuadre) : "No rendición"
+    const categoria = pago.esRendicion ? "RENDICION" : "NO"
     const ejemplo = pago.ejemplo ? "si" : "no"
     const folio = folioBanco(pago.documentos)
     const base = [pago.id, pago.fecha, pago.proveedor, pago.descripcion, pago.tarjeta, pago.monto, folio]
     if (pago.documentos.length === 0) {
-      return [[...base, "", "", "", "", estado, ejemplo]]
+      return [[...base, "", "", "", "", estado, ejemplo, categoria]]
     }
     return pago.documentos.map((documento) => [
       ...base,
@@ -149,6 +179,7 @@ async function exportar(pagos: Pago[], mes: string | null) {
       documento.monto,
       estado,
       ejemplo,
+      categoria,
     ])
   })
   const csv = `\uFEFF${[encabezado, ...filas].map((fila) => fila.map(celda).join(";")).join("\n")}\n`
@@ -179,7 +210,12 @@ const estilos = StyleSheet.create({
   filtroTexto: { color: colores.tinta, fontSize: 14, fontWeight: "600" },
   filtroTextoActivo: { color: colores.primarioTexto },
   vacio: { gap: 8, paddingVertical: 12 },
-  pago: { backgroundColor: colores.tarjeta, borderRadius: 16, gap: 8, padding: 14 },
+  pago: { backgroundColor: colores.tarjeta, borderLeftWidth: 6, borderRadius: 16, gap: 8, padding: 14 },
+  etiquetas: { flexDirection: "row", gap: 6 },
+  etiqueta: { borderRadius: 999, fontSize: 11, fontWeight: "700", overflow: "hidden", paddingHorizontal: 8, paddingVertical: 3 },
+  etiquetaRendicion: { backgroundColor: colores.cuadraFondo, color: colores.cuadraTexto },
+  etiquetaNo: { backgroundColor: colores.vacioFondo, color: colores.vacioTexto },
+  etiquetaFalta: { backgroundColor: colores.faltaFondo, color: colores.faltaTexto },
   pagoCabeza: { flexDirection: "row", gap: 12, justifyContent: "space-between" },
   flex: { flex: 1 },
   fecha: { color: colores.muted, fontSize: 13 },

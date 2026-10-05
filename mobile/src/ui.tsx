@@ -19,6 +19,7 @@ export const colores = {
   vacioFondo: "#E6E1D6",
   vacioTexto: "#4A453C",
   peligro: "#8C1D1D",
+  sinRendicion: "#9AA0A6",
 }
 
 const estilosCuadre: Record<Cuadre["estado"], { fondo: string; texto: string }> = {
