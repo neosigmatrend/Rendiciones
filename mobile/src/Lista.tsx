@@ -46,23 +46,28 @@ export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onN
       <Text style={estilos.version}>versión 19</Text>
       <Text style={estilos.subtitulo}>Pagos con tarjeta</Text>
       <View style={estilos.resumen}>
-        <Resumen etiqueta="Pagos" valor={String(delMes.length)} />
-        <Resumen etiqueta="En tarjeta" valor={formatCLP(total)} />
+        <Resumen etiqueta="En tarjeta" valor={formatCLP(total)} ancho={2} />
         <Resumen etiqueta="Con folio" valor={`${conDocumentos}/${rendiciones.length}`} />
         <Resumen etiqueta="No rend." valor={String(sinRendicion)} />
       </View>
-      <Boton titulo="Capturar rendición" onPress={() => onNuevo("rendicion")} />
-      <Boton titulo="Compra sin rendición" variante="secundario" onPress={() => onNuevo("sin_rendicion")} />
+      <View style={estilos.fila}>
+        <View style={estilos.flex}>
+          <Boton titulo="+ Rendición" onPress={() => onNuevo("rendicion")} />
+        </View>
+        <View style={estilos.flex}>
+          <Boton titulo="+ Sin rendición" variante="secundario" onPress={() => onNuevo("sin_rendicion")} />
+        </View>
+      </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={estilos.meses}>
         <Filtro titulo="Todos" activo={mes === null} onPress={() => setMes(null)} />
         {meses.map((item) => (
           <Filtro key={item} titulo={etiquetaMes(item)} activo={mes === item} onPress={() => setMes(item)} />
         ))}
       </ScrollView>
-      <View style={estilos.meses}>
-        <Filtro titulo="Todas" activo={tipo === "todos"} onPress={() => setTipo("todos")} />
-        <Filtro titulo="Rendiciones" activo={tipo === "rendicion"} onPress={() => setTipo("rendicion")} />
-        <Filtro titulo="No rendición" activo={tipo === "no"} onPress={() => setTipo("no")} />
+      <View style={estilos.fila}>
+        <Filtro titulo="Todas" activo={tipo === "todos"} onPress={() => setTipo("todos")} igual />
+        <Filtro titulo="Rendiciones" activo={tipo === "rendicion"} onPress={() => setTipo("rendicion")} igual />
+        <Filtro titulo="No rendición" activo={tipo === "no"} onPress={() => setTipo("no")} igual />
       </View>
       <Boton titulo="Exportar rendición" variante="secundario" onPress={() => exportar(visibles, mes)} />
       {visibles.length === 0 ? (
@@ -121,19 +126,23 @@ export function Lista({ onAbrir, onNuevo }: { onAbrir: (id: string) => void; onN
   )
 }
 
-function Resumen({ etiqueta, valor }: { etiqueta: string; valor: string }) {
+function Resumen({ etiqueta, valor, ancho = 1 }: { etiqueta: string; valor: string; ancho?: number }) {
   return (
-    <View style={estilos.resumenItem}>
+    <View style={[estilos.resumenItem, { flex: ancho }]}>
       <Text style={estilos.resumenEtiqueta}>{etiqueta}</Text>
-      <Text style={estilos.resumenValor}>{valor}</Text>
+      <Text style={estilos.resumenValor} numberOfLines={1} adjustsFontSizeToFit>
+        {valor}
+      </Text>
     </View>
   )
 }
 
-function Filtro({ titulo, activo, onPress }: { titulo: string; activo: boolean; onPress: () => void }) {
+function Filtro({ titulo, activo, onPress, igual }: { titulo: string; activo: boolean; onPress: () => void; igual?: boolean }) {
   return (
-    <Pressable onPress={onPress} style={[estilos.filtro, activo && estilos.filtroActivo]}>
-      <Text style={[estilos.filtroTexto, activo && estilos.filtroTextoActivo]}>{titulo}</Text>
+    <Pressable onPress={onPress} style={[estilos.filtro, igual && estilos.filtroIgual, activo && estilos.filtroActivo]}>
+      <Text style={[estilos.filtroTexto, activo && estilos.filtroTextoActivo]} numberOfLines={1}>
+        {titulo}
+      </Text>
     </Pressable>
   )
 }
@@ -213,6 +222,8 @@ const estilos = StyleSheet.create({
   resumenEtiqueta: { color: colores.muted, fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
   resumenValor: { color: colores.tinta, fontSize: 16, fontWeight: "700", marginTop: 4 },
   meses: { gap: 8 },
+  fila: { flexDirection: "row", gap: 8 },
+  filtroIgual: { alignItems: "center", flex: 1, paddingHorizontal: 6 },
   filtro: { backgroundColor: colores.tarjeta, borderColor: colores.borde, borderRadius: 999, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
   filtroActivo: { backgroundColor: colores.primario, borderColor: colores.primario },
   filtroTexto: { color: colores.tinta, fontSize: 14, fontWeight: "600" },
