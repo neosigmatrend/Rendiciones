@@ -144,43 +144,53 @@ function celda(valor: string | number) {
   return texto
 }
 
+function fechaBanco(iso: string) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : iso
+}
+
 async function exportar(pagos: Pago[], mes: string | null) {
   const encabezado = [
+    "FECHA",
+    "DESCRIPCION",
+    "TITULAR/ADICIONAL",
+    "MONTO",
+    "CUOTAS PENDIENTES",
+    "VALOR CUOTA",
+    "CATEGORIA",
+    "FOLIO",
+    "OBS",
+    "ESTADO",
     "pago_id",
-    "fecha",
     "proveedor",
-    "descripcion",
     "tarjeta",
-    "monto_pago",
-    "folio_banco",
-    "folio",
-    "tipo",
-    "fecha_documento",
-    "monto_documento",
-    "estado",
+    "descripcion_app",
+    "estado_cuadre",
+    "monto_documentos",
     "ejemplo",
-    "categoria",
   ]
-  const filas = pagos.flatMap((pago) => {
+  const filas = pagos.map((pago) => {
     const cuadre = cuadreDe(pago.monto, pago.documentos)
-    const estado = pago.esRendicion ? etiquetaCuadre(cuadre) : "No rendición"
-    const categoria = pago.esRendicion ? "RENDICION" : "NO"
-    const ejemplo = pago.ejemplo ? "si" : "no"
-    const folio = folioBanco(pago.documentos)
-    const base = [pago.id, pago.fecha, pago.proveedor, pago.descripcion, pago.tarjeta, pago.monto, folio]
-    if (pago.documentos.length === 0) {
-      return [[...base, "", "", "", "", estado, ejemplo, categoria]]
-    }
-    return pago.documentos.map((documento) => [
-      ...base,
-      documento.folio,
-      documento.tipo,
-      documento.fecha,
-      documento.monto,
-      estado,
-      ejemplo,
-      categoria,
-    ])
+    const proveedor = pago.proveedor.trim()
+    return [
+      fechaBanco(pago.fecha),
+      `COMPRA ${proveedor}`.trim().toUpperCase(),
+      "Titular",
+      pago.monto,
+      0,
+      pago.monto,
+      pago.esRendicion ? "RENDICION" : "NO",
+      pago.esRendicion ? folioBanco(pago.documentos) : "",
+      pago.esRendicion ? proveedor : "",
+      "",
+      pago.id,
+      proveedor,
+      pago.tarjeta,
+      pago.descripcion,
+      pago.esRendicion ? etiquetaCuadre(cuadre) : "No rendición",
+      pago.esRendicion ? cuadre.suma : "",
+      pago.ejemplo ? "si" : "no",
+    ]
   })
   const csv = `\uFEFF${[encabezado, ...filas].map((fila) => fila.map(celda).join(";")).join("\n")}\n`
   const nombre = mes ? `rendicion-${mes}.csv` : "rendicion.csv"
